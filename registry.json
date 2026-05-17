@@ -1,10 +1,10 @@
 {
   "version": "2.0.0",
-  "last_updated": "2026-05-13",
+  "last_updated": "2026-05-17",
   "owner": "SUNMANOFFICIAL189",
   "identity": "CLAUDE HQ",
   "description": "The central command center for JARVIS \u2014 an autonomous agentic system. Claude always references this for major projects. Commander orchestrates all tools.",
-  "tool_count": 36,
+  "tool_count": 37,
   "skill_count": 10,
   "auto_trigger_rules": [
     "ANY PRD provided or referenced by the user triggers CLAUDE HQ activation \u2014 this means a long-running project",
@@ -1318,6 +1318,49 @@
       "pinned_sha_at_registration": "64792af52bfcde18594263ea6b8dbfabe3aa0679",
       "pinned_sha_date": "2026-05-12T21:03:51Z",
       "local_snapshot": "~/.claude/projects/-Users-sunil-rajput/memory/snapshots/2026-05-13-repo-evaluations/agent-native/"
+    },
+    {
+      "id": "codex-plugin-cc",
+      "name": "Codex plugin for Claude Code",
+      "source": "https://github.com/openai/codex-plugin-cc",
+      "type": "claude_code_plugin",
+      "category": "agents",
+      "owner": "openai",
+      "description": "Delegates code review and coding work from Claude Code to a separately installed Codex CLI (gpt-5.x). Surfaces /codex:review, /codex:adversarial-review, /codex:rescue, /codex:status, /codex:result, /codex:cancel slash commands plus the codex:codex-rescue subagent. Plugin never touches credentials — all auth flows through the local codex CLI. Read-only sandbox by default; write requires explicit --write.",
+      "activation_triggers": [
+        "Multi-file bug or regression that Claude has gotten stuck on",
+        "Pre-deploy adversarial pressure-test before pushing risky changes (Lesson 7 / pipeline-isolation doctrine)",
+        "Long-running coding task where Claude should keep planning in parallel — use /codex:rescue --background",
+        "Second-model fresh-eyes review wanted on architectural decisions or hairy debugging",
+        "User explicitly says delegate / hand to Codex / ask Codex / let Codex do it",
+        "PATS-Copy strategy or risk-manager changes — adversarial review before live deploy",
+        "Get-Rich-Scheme pipeline code that ships to users (drafts before delivery)",
+        "Phase 0 / Phase 6 verify-before-flip gates across any project"
+      ],
+      "anti_triggers": [
+        "Single-line edits or trivial typo fixes (Claude is faster, no second-model value)",
+        "Tasks needing HQ Commander orchestration or knowledge-layer sync — Codex does not see HQ context, claude-mem, recall-stack, MemPalace, or registries",
+        "Work that should accumulate as Lessons in commander/LESSONS.md (Codex sessions do not feed the lesson loop)",
+        "Pure planning / research / decision work with no code to write or review",
+        "When Codex usage quota is near depletion (rolling 5-hour window) — fall back to Claude until window rolls",
+        "Tasks where the user wants a single coherent thread of context-building for the memory layer",
+        "/codex:setup --enable-review-gate — explicit anti-pattern per CTDD eval (drains quota on every Stop event)"
+      ],
+      "dependencies": [
+        "@openai-org codex CLI installed globally (verified at /opt/homebrew/bin/codex v0.130.0)",
+        "codex login completed (ChatGPT subscription or OpenAI API key)",
+        "Plugin loaded via Claude Code marketplace (openai-codex/codex@1.0.4)"
+      ],
+      "setup_instructions": {
+        "method": "already_installed_2026_05_17",
+        "command": "Plugin loaded via Claude Code marketplace. Codex CLI present at /opt/homebrew/bin/codex. ChatGPT auth active for sunnykrajput1987@gmail.com.",
+        "verify": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs\" setup --json"
+      },
+      "integration_notes": "CTDD evaluated 2026-05-17 — GREEN-LIGHT. Full eval at ~/.claude/projects/-Users-sunil-rajput/memory/project_repo_eval_codex_plugin_cc.md. Three hooks fire every session (SessionStart, SessionEnd, Stop) — all verified safe; Stop short-circuits when reviewGateEnabled=false. KEEP REVIEW GATE OFF — it drains quota on every Stop event. For pre-deploy reviews (PATS-Copy / Corporate Brains / Get-Rich-Scheme), use /codex:adversarial-review with focus text. For stuck-debugging escalation, use /codex:rescue --background and check progress with /codex:status.",
+      "priority": "HIGH",
+      "status": "active",
+      "added_date": "2026-05-17",
+      "cost_note": "Usage flows against active ChatGPT plan. Free/Plus tiers have rolling 5-hour soft+hard caps; Pro tiers have higher multipliers (5x / 20x). No top-up needed beyond the existing plan. Hitting the cap returns rate-limit errors until the rolling window expires."
     }
   ],
   "skills": [

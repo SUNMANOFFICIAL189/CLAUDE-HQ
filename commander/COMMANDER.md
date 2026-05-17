@@ -227,6 +227,13 @@ STEP 7: DELIVER
 **Swarm:** ruflo (if 10+ parallel tasks needed)
 **Bootstrap:** Full Step 0 (project dir, git, GitHub, knowledge layer)
 
+**Codex delegation (targeted-by-default per `feedback_codex_delegation_doctrine.md`):**
+- Propose `/codex:rescue` when: multi-file bug resists 2+ Claude fix attempts, long-running coding task that benefits from parallel planning, user says "stuck"/"investigate"/"rescue"/"hand to codex", hairy debugging needs a second model, bounded autonomous write-capable task requested.
+- Propose `/codex:adversarial-review` when: pre-deploy gate on any production change (PATS-Copy strategy / risk-manager edits, Corporate Brains, Get-Rich-Scheme drafts, Phase 0/Phase 6 verify-before-flip patterns), architectural decision under review, user says "before we ship"/"pressure-test"/"sanity check".
+- Stay on Claude for: trivial edits, planning/research with no code, work that should accumulate as Lessons, fast iteration loops where Codex spin-up adds latency, when Codex quota is near depletion.
+- **Always propose, never silently delegate** (Lesson 17). Wait for explicit yes/no.
+- **Hard rule:** never enable `/codex:setup --enable-review-gate` — drains quota on every Stop event.
+
 ### Web Design & Frontend
 **Triggers:** design, landing page, UI, UX, dashboard, portfolio, website design
 **Default stack:** ui-ux-pro-max → SuperDesign → emilkowalski/skill → stitch-skills
