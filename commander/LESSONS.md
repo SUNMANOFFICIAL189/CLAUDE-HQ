@@ -598,7 +598,19 @@
      mandatory.** Only explain in plain English when there's something
      genuinely surprising or risky the operator would want to know.
      Routine narration becomes its own friction and re-creates the noise
-     the auto-pilot eliminated.
+     the auto-pilot eliminated. **Canonical "genuinely surprising" case:**
+     a Layer 2 standard permission prompt fires that looks similar to a
+     Layer 1 security warning. Layer 1 prompts have warning text above
+     the "Do you want to proceed?" line (e.g., *"this command changes
+     directory before running git, which can execute untrusted hooks"*);
+     Layer 2 prompts have just the bare question with no warning text.
+     The two look near-identical to a non-technical operator who cannot
+     reliably tell them apart at a glance. Pre-explain when about to run
+     a command that will fire a Layer 2 prompt — name it as the standard
+     ask, not a warning, so the operator's "yes" is informed. This
+     discipline was added 2026-05-23 after the cd-vs-git-C substitution
+     eliminated the Layer 1 warning but left a Layer 2 ask that looked
+     identical, causing reasonable confusion.
   4. **The operator's safe fallback** to any prompt they don't understand
      is **"no" or "explain first"** — never "yes." Codifying this rule
      reduces how often that fallback is needed; codifying it does not
