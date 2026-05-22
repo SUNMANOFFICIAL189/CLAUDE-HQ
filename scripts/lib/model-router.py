@@ -102,6 +102,44 @@ def normalise_tier(value: str | None) -> str | None:
     return v if v in VALID_TIERS else None
 
 
+def is_anthropic_model(model: str) -> bool:
+    """Heuristic: True if a model string looks like a Claude/Anthropic model.
+
+    Examples that match: "claude-sonnet-4-6", "Claude-Haiku-4-5-20251001",
+      "claude-opus-4-7", "claude-foo-99" (unknown but Claude-shaped),
+      bare tier aliases "haiku" / "sonnet" / "opus".
+    Examples that do NOT match: "gemini-2.5-flash", "gpt-4", "kimi-k2-instruct".
+
+    Ported from Paperclip's modelRouting/router.ts (2026-05-08 safety rule).
+    """
+    if not model:
+        return False
+    m = model.lower().strip()
+    if m.startswith("claude") or "anthropic" in m:
+        return True
+    # Bare tier aliases are treated as Anthropic-shaped (HQ accepts them today)
+    if m in VALID_TIERS:
+        return True
+    return False
+
+
+def tier_for_model(model: str) -> str | None:
+    """Extract tier (haiku/sonnet/opus) from a Claude model string.
+
+    Substring match. Returns None for non-Claude or unrecognised strings.
+    """
+    if not model:
+        return None
+    m = model.lower()
+    if "haiku" in m:
+        return "haiku"
+    if "sonnet" in m:
+        return "sonnet"
+    if "opus" in m:
+        return "opus"
+    return None
+
+
 # --------------------------------------------------------------------------
 # Decision logic — §3 algorithm
 # --------------------------------------------------------------------------
@@ -145,49 +183,67 @@ def decide(tool_input: dict) -> tuple[str, str]:
 
     Order:
       1. HQ_ROUTER_OFF=1                     → pass-through, no routing applied
-      2. Pick a candidate tier:
-           a. HQ_MODEL_OVERRIDE if set       → that tier
-           b. else caller-supplied model:    → caller's choice
-           c. else doctrine keyword match    → tier from §5 table
-           d. else default                   → DEFAULT_TIER (sonnet)
-      3. Hard floor guard: if subagent kind is on the §4 list, force opus
-         (this beats every choice in step 2 except HQ_ROUTER_OFF).
-      4. HQ_MODEL_FLOOR guard: never go below the user-set floor.
+      2. Non-Anthropic passthrough           → if caller set a non-Claude model,
+                                               preserve it verbatim (added
+                                               2026-05-23, ported from Paperclip)
+      3. Pick a candidate tier:
+           a. HQ_MODEL_OVERRIDE if set       → that tier (explicit intent,
+                                               skips current_tier_floor)
+           b. else doctrine keyword match    → tier from §5 table
+           c. else default                   → DEFAULT_TIER (sonnet)
+      4. current_tier_floor                  → if caller's tier was HIGHER than
+                                               doctrine's choice, keep caller's
+                                               (added 2026-05-23, ported from
+                                               Paperclip). Doctrine can escalate,
+                                               never downgrade.
+      5. Hard floor guard: if subagent kind is on the §4 list, force opus
+         (this beats every choice in steps 3-4 except HQ_ROUTER_OFF).
+      6. HQ_MODEL_FLOOR guard: never go below the user-set floor.
     """
     # 1. Router off entirely
     if os.environ.get("HQ_ROUTER_OFF") == "1":
         return tool_input.get("model") or DEFAULT_TIER, "router-off"
 
-    subagent_type = tool_input.get("subagent_type", "") or ""
+    # 2. Non-Anthropic passthrough — preserve cross-provider operator choices
+    current_model = (tool_input.get("model") or "").strip()
+    if current_model and not is_anthropic_model(current_model):
+        return current_model, "non-anthropic-passthrough"
 
-    # 2. Pick candidate tier
-    candidate_tier = None
+    subagent_type = tool_input.get("subagent_type", "") or ""
+    current_tier = tier_for_model(current_model) if current_model else None
+
+    # 3. Pick candidate tier
+    candidate_tier: str | None = None
     candidate_reason = ""
 
     override = normalise_tier(os.environ.get("HQ_MODEL_OVERRIDE"))
     if override:
         candidate_tier = override
         candidate_reason = f"env-override (HQ_MODEL_OVERRIDE={override})"
-
-    if not candidate_tier:
-        requested = normalise_tier(tool_input.get("model"))
-        if requested:
-            candidate_tier = requested
-            candidate_reason = "caller-supplied"
-
-    if not candidate_tier:
+        # env_override is explicit intent — skip current_tier_floor
+    else:
         prompt = tool_input.get("prompt", "") or ""
         tier, label = doctrine_match(prompt)
         candidate_tier = tier
         candidate_reason = label
 
-    # 3. Hard floor — overrides candidate (§4: refuse all downgrades)
+        # 4. current_tier_floor — doctrine can escalate above caller's choice,
+        #    but never downgrade it. If caller specified a HIGHER tier than
+        #    doctrine picked, keep caller's choice.
+        if current_tier and TIER_ORDER[current_tier] > TIER_ORDER[candidate_tier]:
+            candidate_reason = (
+                f"current-tier-floor (caller={current_tier}; "
+                f"doctrine wanted {candidate_tier})"
+            )
+            candidate_tier = current_tier
+
+    # 5. Hard floor — overrides candidate (§4: refuse all downgrades)
     if is_hard_floor(subagent_type):
         if TIER_ORDER[candidate_tier] < TIER_ORDER["opus"]:
             return "opus", f"hard-floor ({subagent_type}; candidate was {candidate_tier})"
         return "opus", f"hard-floor ({subagent_type})"
 
-    # 4. HQ_MODEL_FLOOR
+    # 6. HQ_MODEL_FLOOR
     floor = normalise_tier(os.environ.get("HQ_MODEL_FLOOR"))
     new_tier, applied = apply_floor(candidate_tier, floor)
     if applied:
