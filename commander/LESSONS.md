@@ -557,3 +557,58 @@
   6. The fork-username signal generalises: any time research surfaces a
      repo whose name overlaps with one of the user's forks, default to "the
      user already adopted this; surface the existing fork before the upstream."
+
+### 24. Prefer simpler commands over dangerous primitives that trigger prompts
+- **Rule:** Before reaching for a "dangerous primitive" (interpreters like
+  `python3`/`node`/`bun`/`deno`/`ruby`, shells, package runners like `npx`/
+  `bunx`, `eval`, `exec`) ask whether a simpler equivalent achieves the same
+  outcome without triggering a permission prompt. Most ad-hoc verification,
+  parsing, and orchestration can be done with bash one-liners, `jq`,
+  `sqlite3` queries, or built-in tools that are already auto-allowed. Reach
+  for a dangerous primitive only when the work genuinely justifies it.
+- **Why:** 2026-05-23 — during the Paperclip safety-rules port, Claude wrote
+  a 130-line Python test scaffold for verification when 4–6 bash one-liners
+  would have provided equivalent coverage with no permission prompt. The
+  `python3` prompt that fired forced Sunil to evaluate a technical pattern
+  he couldn't meaningfully assess. His honest response: *"I would just hit
+  yes."* That exposed a structural problem — **a permission gate is only
+  real safety if the operator can evaluate it.** The auto-pilot permission
+  rules (Lesson 23-adjacent work, 2026-05-22) cover the routine cases; the
+  remaining gap is dangerous primitives that can't be wildcard-allowed for
+  security reasons (interpreters give arbitrary code execution). Sunil
+  initially asked whether the fix should be "Claude explains every command
+  in plain English before it prompts." On reflection, that was wrong — it
+  re-adds friction that the auto-pilot just removed and contradicts the
+  whole direction of the work. The correct fix is **operational discipline
+  on Claude's side**: don't reach for dangerous primitives unless the work
+  genuinely needs them. Prevention beats explanation.
+- **How to apply:**
+  1. **Before any command in the "dangerous wildcard" category**
+     (interpreters, shells, package runners, `eval`/`exec`), ask: is there
+     a simpler equivalent that won't trigger a permission prompt? Examples:
+     `python3 -c "json.loads(...)"` → `jq '.'`; ad-hoc python loops →
+     `for f in *; do ...; done`; python sqlite probe → `sqlite3 db
+     "SELECT ..."`. The auto-allowed primitives (Lesson 23 work) cover
+     more than people remember.
+  2. **Reserve scripts for genuine complexity.** Under ~20 lines of logic
+     = bash, usually. Over that = script, but consider whether the script
+     can be invoked from a path already in the allow-list (e.g., a project
+     binary already approved) rather than via `python3 path/to/script.py`.
+  3. **When a prompt does fire**, narration is **opportunistic, not
+     mandatory.** Only explain in plain English when there's something
+     genuinely surprising or risky the operator would want to know.
+     Routine narration becomes its own friction and re-creates the noise
+     the auto-pilot eliminated.
+  4. **The operator's safe fallback** to any prompt they don't understand
+     is **"no" or "explain first"** — never "yes." Codifying this rule
+     reduces how often that fallback is needed; codifying it does not
+     make the operator responsible for technical evaluation they can't
+     meaningfully do.
+  5. **Pairs with Lesson 23.** Lesson 23 (probe before recommending) covers
+     "is this thing already here?" Lesson 24 (prefer simpler primitives)
+     covers "do I need this power to do the job?" Both are upstream
+     discipline that reduces operator-side burden.
+  6. **Anti-pattern:** allowing the operator's "yes" on opaque prompts to
+     bear the safety weight. That is theatrical safety. The auto-pilot
+     allowlist + this rule together push the safety boundary upstream of
+     the operator's evaluation.
