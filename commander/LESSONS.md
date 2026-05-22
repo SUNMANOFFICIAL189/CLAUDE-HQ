@@ -612,3 +612,19 @@
      bear the safety weight. That is theatrical safety. The auto-pilot
      allowlist + this rule together push the safety boundary upstream of
      the operator's evaluation.
+
+  ### Named examples (these patterns bite repeatedly — keep this list growing)
+
+  | Wrong (triggers prompt) | Right (no prompt) | Why |
+  |---|---|---|
+  | `cd ~/repo && git status` | `git -C ~/repo status` | `cd && git` warns about untrusted hooks in target dir; `git -C` runs git "as if" in that dir without changing shell cwd. Same outcome, no warning. |
+  | `cd ~/repo && git commit -m "..."` | `git -C ~/repo commit -m "..."` | Same as above. Use for every git subcommand outside cwd. |
+  | `cd ~/repo && git push origin main` | `git -C ~/repo push origin main` | Same as above. Final push usually surfaces the warning even if earlier commands didn't. |
+  | `python3 -c "import json; print(json.loads(...))"` | `jq '.field' file.json` | `python3` is a "dangerous wildcard" — interpreter prompts can never be safely auto-allowed. `jq` is already auto-allowed for read-only ops. |
+  | `python3 -c "import sqlite3; ..."` | `sqlite3 db.sqlite "SELECT ..."` | Same as above. `sqlite3` is the right primitive for DB probes. |
+  | Ad-hoc Python loop over files | `for f in *; do ...; done` in bash | Bash loops are auto-allowed; Python interpreters aren't. |
+  | 130-line Python test scaffold | 4-6 inline `bash -c` one-liners | The 2026-05-23 router-port verification surfaced this exact case. Same coverage, no prompts. |
+
+  When a new pattern bites, add a row to this table. The table is the
+  cheapest form of cumulative learning — readers see the right primitive
+  next to the wrong one, no abstraction required.
