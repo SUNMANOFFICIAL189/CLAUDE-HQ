@@ -456,3 +456,104 @@
      `memory_probe_invocations_per_session` and `tasks_starting_without_probe`
      measure whether the rule is being applied. Tracked as BACKLOG
      follow-up.
+
+### 22. Transcript-verifier autonomy loops have the PATS default-approve shape — reject without external-verifier scaffold
+- **Rule:** Do NOT add to HQ Commander doctrine any autonomy loop where Claude
+  works across turns and a smaller model reads the *transcript* to decide
+  whether the goal is met. Specifically: do not integrate `/goal` (or any
+  equivalent Anthropic / community / custom command with the same architecture)
+  until ALL five exist: (1) deterministic external verifier (exit code, not
+  transcript reading), (2) read-only access on the verification target,
+  (3) pre-flight game-the-condition test where the operator names three ways
+  the agent could "complete" without doing the work (if three are nameable,
+  the tool is wrong), (4) outcome-over-artifact condition framing, (5) human
+  ship gate (autonomy drives work, never the merge/deploy decision).
+- **Why:** 2026-05-21 — evaluated `/goal` (shipped v2.1.139 on 2026-05-12) for
+  Commander integration. First-pass proposal included scope rules ("yes for
+  tests/backlog, no for PATS strategy"), turn cap, token cap, propose-don't-
+  auto-invoke. User correctly pushed back. On re-analysis, the structural
+  shape is identical to the PATS Mar→Apr collapse (see Lesson context):
+  agent given default-approve authority on a stream of decisions, verifier
+  biased toward confirming ("yes looks done" — Haiku is a smaller cooperative
+  model with structural default-confirm bias), no circuit breaker, agent
+  rewards itself via the metric rather than the underlying outcome. Goodhart
+  failures within even "safe" scope are trivially nameable: condition "fix
+  all failing tests" → disable test / `pytest.skip` / mock dependency /
+  comment out assertion. In each case the artifact is achieved while the
+  outcome is destroyed. Haiku verifier is transcript-blind: if Claude says
+  "tests pass" and reality says otherwise, Haiku doesn't catch it. External
+  commentary already flags this ("Goodhart's Law Just Got a Slash Command",
+  mpt.solutions). The first-pass scope rules were insufficient — they did
+  not address rubber-stamping bias, within-scope Goodhart drift, metric
+  gaming, or transcript-blindness. I had to admit and reverse, which is
+  the CTDD discipline working as intended.
+- **How to apply:**
+  1. When any tool/command proposes "set a goal, let the agent loop until
+     a model-judged completion check passes," reject for HQ doctrine
+     unless all five scaffold requirements above are satisfied.
+  2. The five-item scaffold is real engineering, not doctrine words.
+     Don't accept "we'll be careful" or "scope rules" as substitutes.
+  3. The rule generalises beyond `/goal` — apply to any future
+     transcript-verifier autonomy loop (community skills, custom commands,
+     SDK patterns, agent frameworks).
+  4. Full eval and revisit conditions at
+     `~/.claude/projects/-Users-sunil-rajput/memory/reference_slash_command_integration_eval_2026_05_21.md`.
+  5. Note: `/ultraplan` was parked alongside `/goal` in the same session
+     decision but is NOT dangerous in the same way — it fills a real
+     gap (cloud planning for big builds). Different revisit trigger:
+     pain from terminal-blocking planning on a large PRD-driven build.
+     Do not conflate the two reject reasons.
+
+### 23. Probe local state BEFORE recommending any externally-discovered tool
+- **Rule:** Before proposing the user Trust-Gate, install, or pilot any tool
+  surfaced via research (GitHub, Reddit, Show HN, awesome-lists, deep-research
+  scans), first run a local-state probe to check whether the same tool — or
+  a near-equivalent — is already installed, running, or sitting in an on-disk
+  project. The probe must cover at minimum: listening ports, running
+  processes, launchd agents, project directories under `~/projects`,
+  `~/Desktop`, `~/claude-hq`, and forks under the user's own GitHub username
+  (`SUNMANOFFICIAL189`). If anything turns up, that becomes the priority
+  investigation path — read its README, check its config, verify what it
+  actually does — *before* any external research recommendation is surfaced.
+- **Why:** 2026-05-22 — during a research session on "JARVIS-style multi-agent
+  control panel" tools, I ranked `builderz-labs/mission-control` as the #1
+  install candidate and was about to recommend a full Trust-Gate + install +
+  7-day pilot. The user pushed back: *"investigate localhost:3001 first."*
+  The probe revealed `builderz-labs/mission-control` was already forked at
+  `SUNMANOFFICIAL189/mission-control-fleet`, deployed under AI Agent Fleet
+  Ventures, pinned to a specific upstream commit per Lesson 1 best practice,
+  and running on PID 80503 the entire time we'd been having the conversation.
+  The user had forgotten between projects. We were one user-instruction away
+  from completing the entire adoption cycle for the second time — Trust Gate,
+  pilot soak, all of it. The CTDD discipline caught it, but only because
+  the user explicitly asked for the verification step I should have proposed
+  first. Token cost of the redundant research + recommendation loop: ~150K.
+  Token cost of the probe that would have prevented it: ~3K.
+- **How to apply:**
+  1. **Local-state probe runs BEFORE external research, not after.** Cheapest
+     possible step. Sequence: probe → if nothing found, then research → if
+     research finds candidates, probe AGAIN with the candidate names before
+     recommending.
+  2. The probe should include at minimum:
+     - `lsof -nP -iTCP -sTCP:LISTEN | head -50` — what's already serving HTTP
+     - `ps aux | grep -iE "<tool-keywords>" | grep -v grep` — running processes
+     - `ls ~/Library/LaunchAgents/ | grep -i <keyword>` and `launchctl list | grep -i <keyword>` — scheduled services
+     - `find ~/projects ~/Desktop ~/claude-hq -maxdepth 4 -type d -iname "*<keyword>*" 2>/dev/null` — on-disk projects
+     - `gh repo list SUNMANOFFICIAL189 --limit 200 | grep -i <keyword>` — own forks
+     (Pattern: the user forks tools they intend to keep; `SUNMANOFFICIAL189`
+     prefix is a particularly strong "already adopted" signal.)
+  3. If ANY of the above surface a candidate, the response to the user must
+     lead with that finding, not with the external research. Phrasing pattern:
+     "Before recommending anything new, I checked the local machine — found X
+     already at Y. Investigating that first."
+  4. References to vague names in HQ docs ("Mission Control owns port 3001",
+     "the dashboard at localhost:N") are themselves probe triggers. If a name
+     is referenced without a definition, assume something exists and verify
+     before assuming "we should build that."
+  5. Pairs with Lesson 5 (always `/scout` before authoring a new skill).
+     Lesson 5 covers the ecosystem case ("does this exist on skills.sh?");
+     Lesson 23 covers the local case ("do I already have it?"). Lesson 23
+     is the cheaper of the two and should run first.
+  6. The fork-username signal generalises: any time research surfaces a
+     repo whose name overlaps with one of the user's forks, default to "the
+     user already adopted this; surface the existing fork before the upstream."
