@@ -640,3 +640,35 @@
   When a new pattern bites, add a row to this table. The table is the
   cheapest form of cumulative learning — readers see the right primitive
   next to the wrong one, no abstraction required.
+
+  ### Narrow allow rules — trust the resource, not the wildcard
+
+  Some dangerous primitives (`curl`, `ssh`, `gh api`) cannot be safely
+  wildcarded (`Bash(curl *)` = arbitrary URL exfiltration; `Bash(ssh *)` =
+  arbitrary remote code execution). But for **known-trusted resources**
+  the operator owns or queries routinely, narrow patterns are acceptable
+  and dramatically reduce friction without expanding attack surface.
+
+  The principle: **pin the host/URL in the rule pattern; never blanket-allow
+  the primitive.**
+
+  Examples currently in `~/.claude/settings.json`:
+
+  | Resource | Narrow allow pattern | Why safe |
+  |---|---|---|
+  | Polymarket public data API | `Bash(curl*data-api.polymarket.com/*)` | Public read-only JSON, no auth, can't execute remote code, can't reach attacker-controlled domains |
+  | Hetzner production server (operator-owned) | `Bash(ssh*root@204.168.204.247*)` | Operator already trusts SSH access, server is operator-owned infrastructure; marginal safety of prompting is near-zero |
+
+  When a new trusted resource emerges, add a narrow pattern:
+  - Pin the domain/host in the pattern (`*<known-host>/*`)
+  - Document the trust rationale in this table
+  - **Never** add the wildcard form alongside (e.g., never add `Bash(curl *)` thinking "it's covered by narrow rules anyway" — the wildcard's match scope is unbounded)
+
+  **What this never covers:**
+  - URLs/hosts you've never used before — they prompt the first time (correctly)
+  - Compound commands where one subcommand isn't trusted — Claude Code splits and matches each independently
+  - The interpreter wildcards (`python3`, `node`, `bun`, etc.) — those stay forbidden categorically. Use bash + jq/sqlite3 instead per the table above.
+
+  **Anti-pattern:** "Yes, and don't ask again for: ssh *" or any UI-shortcut
+  that creates a blanket wildcard. That's the keys-to-the-kingdom failure
+  mode. Always reach for the narrow-pattern rule instead.
