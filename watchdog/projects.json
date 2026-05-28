@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-04-27",
+  "last_updated": "2026-05-28",
   "description": "Projects watched by the HQ Watchdog. Each entry is one project the watchdog ingests commits, sessions, and (optionally) lessons for. claude-hq is the default project \u2014 used as fallback when no project is specified, but holds no special status in the code.",
   "projects": [
     {
@@ -25,6 +25,22 @@
       "lessons_path": "LESSONS_FLEET.md",
       "added": "2026-04-27",
       "notes": "Autonomous agent portfolio with Darwinian mortality. Mission Control fork at dashboard/mission-control-fleet/ tracked separately as subrepo (its own git remote, not part of this project's commits). Paperclip control plane evaluated 2026-04-27 \u2014 pivot decision pending. lessons_path points to project-local LESSONS_FLEET.md (separate from HQ-wide commander/LESSONS.md per brief)."
+    },
+    {
+      "name": "get-rich-scheme",
+      "display_name": "Get-Rich-Scheme",
+      "repo_path": "/Users/sunil_rajput/projects/get-rich-scheme",
+      "lessons_path": null,
+      "added": "2026-05-09",
+      "notes": "Reddit pain-point to micro-SaaS pipeline (Tiiny.host model). 6-phase operator-gated pipeline. Phase 0 ready to trigger 2026-05-09. No git repo yet (deferred until Phase 4 build). Layers 0+A+B; not C/D. Phase 5 is draft-and-deliver, never auto-post. Self-sustaining cron loops deferred until first validated launch."
+    },
+    {
+      "name": "insta-notion-sync",
+      "display_name": "Insta-Notion Sync",
+      "repo_path": "/Users/sunil_rajput/projects/insta-notion-sync",
+      "lessons_path": null,
+      "added": "2026-05-28",
+      "notes": "IG saved-videos to Notion auto-sync. Android share intent → Notion DB → Mac LaunchAgent (every 15 min) → yt-dlp + Gemini 2.5 Flash → enriched Notion entry. Forward-only (no backfill). Free tier (Gemini AI Studio, no card). Plan B fallback: local Whisper + Claude Haiku. Layers 0+A+B; not C/D. lessons_path null — project-local lessons in vault, HQ-wide stay in commander/LESSONS.md."
     }
   ]
 }
