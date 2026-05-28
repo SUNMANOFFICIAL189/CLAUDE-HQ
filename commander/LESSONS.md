@@ -672,3 +672,220 @@
   **Anti-pattern:** "Yes, and don't ask again for: ssh *" or any UI-shortcut
   that creates a blanket wildcard. That's the keys-to-the-kingdom failure
   mode. Always reach for the narrow-pattern rule instead.
+
+### 25. Counterfactual recommendations require scaled-outcome Z-scores BEFORE the recommendation, not after
+
+- **Rule:** Any recommendation to ADD a copy source (wallet, strategy, signal stream) or
+  EXPAND a copy mechanism (BUY-only → +SELL, single-trade → +basket, etc.) requires
+  computing the **statistical significance of the scaled outcome at our actual trading
+  size** before stating the recommendation. The minimum required artifact is a Z-score
+  on per-trade P&L scaled to our flat size, computed against the largest realistic
+  sample available. Counts, open-positions mark-to-market, dollar-volume coverage, and
+  "this looks positive" headline metrics are NOT sufficient and CANNOT substitute. If
+  the Z-score can't be computed (sample too small, data unavailable), the recommendation
+  is "we don't know" — never "ship it" by default.
+
+- **Why:** 2026-05-24 — during PATS-Copy session, I produced two premature recommendations
+  in 30 minutes that the operator caught only because he pushed back. **Both followed
+  identical failure shapes:**
+
+  1. *JustCrazy wallet promotion*: I cited her "+$4,647 all-open mark-to-market" and
+     "+7.1% median return, 55% win rate" as data-backed support. Did NOT check realized
+     P&L history. Did NOT compute Z-score on the full distribution. When I finally did
+     the deep dive (operator-requested), her realized history was −$161,386 across 47
+     catastrophic losers; mean return per trade −4,565% with stdev 20,591%; **Z-score
+     −3.83σ — statistically significant loser**, not winner. 53% of her BUYs at <$0.05
+     entry — same portfolio-longtail archetype as balthazar/MRF that we'd already
+     decided was architecturally incompatible. A 30-second archetype check would have
+     caught it before the recommendation.
+
+  2. *SELL-side mirroring*: I cited "74% of Car's signal is missed because we're BUY-only"
+     as a coverage gap worth closing. Did NOT check whether mirroring those SELLs would
+     make money. When I finally did the deep dive (operator-pushed): 53% of Car's SELLs
+     are EXITS (closing positions he previously bought — not actionable signal for us);
+     of the 47% fresh shorts, the actionable mark-to-market sample of 20 trades shows
+     **Z-score −2.56σ — statistically significant loser** at our $50 scaled size.
+     Sum P&L if we'd taken every one: −$701. 70% would have exceeded our max-loss cap
+     anyway. The "missed signal" was mostly garbage signal and asymmetric exposure.
+
+  The pattern in both cases: **headline-positive metric → "let's capture it" framing →
+  supporting prose written after the recommendation rather than CTDD work done before it.**
+  My own memory file already says "Code first, prose second, recommendation third —
+  reverse order = overconfident garbage" (PATS-Copy lesson, 2026-05-16). I violated
+  this twice in the same session for the same project. The operator's "how did you
+  miss this and make a suggestion that could have been detrimental?" was the structural
+  intervention. If a recommendation was potentially-shippable but data-disconfirming
+  under scrutiny, the recommendation itself was the bug — not just the verification gap.
+
+- **How to apply:**
+
+  1. **Pre-recommendation gate (mechanical, no judgement):** before ANY recommendation
+     of the form "add wallet X" / "enable mechanism Y" / "expand coverage to Z", you
+     must produce — in order, in writing — these six artifacts:
+     - **Sample size** (n positions/trades at minimum 30 for any inference)
+     - **Win/loss distribution** counts (not just net P&L — explicit W and L breakdown)
+     - **Z-score on per-trade outcome scaled to our actual trading size** — NOT on
+       percentage returns. Percentage Z-scores are biased toward portfolio-longtail
+       wallets because rare longshot wins produce huge % gains that mask catastrophic
+       dollar losses on the modal trade. Scale to OUR flat trade size and use dollars.
+     - **Cumulative scaled $sum AND realized $pnl both > 0** — pairing them blocks the
+       "unresolved long-tail inflation" trap. /positions data over-weights open longshots
+       that haven't gone to zero yet; realized P&L is harder to spoof.
+     - **Archetype check via longshot ratio** (% of BUYs at price ≤$0.05). If ≥40%, it's
+       portfolio-longtail and our single-trade architecture can't capture it. Do NOT use
+       n_events as the archetype filter — it inflates with high-frequency markets
+       (BTC up/down 5m, daily sports) and produces false negatives on legitimate
+       info-edge wallets (Car has 95 events but is the reference info-edge candidate).
+     - **Tail-risk check** (worst hypothetical $50 trade > -$200): single-trade max loss
+       must not exceed ~13% of our pool. Catches asymmetric exposure that would trip
+       the drawdown breaker in flight.
+
+     If any of these is missing, the answer is "needs more data" or "no", never "ship".
+
+  2. **Mark-to-market is biased.** Open-position MTM views suffer survivorship bias —
+     unresolved long-tail bets look like winners until they resolve to zero. Anchor
+     to realized P&L history (which has actually paid out) and treat MTM as suggestive
+     only.
+
+  3. **Counts and volume are NOT outcomes.** "74% of trades are SELL" tells you nothing
+     about whether mirroring them makes money. Always compute the outcome of the trades
+     before citing the volume of them.
+
+  4. **Archetype mismatch trumps everything.** If the source is portfolio-longtail and
+     our architecture is single-trade copy, the recommendation is "no" regardless of
+     headline numbers. This is upstream of statistical analysis — a thirty-second check
+     (% of BUYs at <$0.05, top-event concentration, sample of trade descriptions) tells
+     you the archetype before any deeper work.
+
+  5. **The recommendation IS the bug.** If a recommendation can be falsified by analysis
+     the recommender hadn't done at the time of recommending, then making the
+     recommendation was the failure — not "missing a check." The bias to find something
+     to do is the load-bearing problem. The mechanical fix is: any recommendation gets
+     gated through artifacts (1) above before the recommendation language is allowed.
+
+  6. **Generalises beyond PATS-Copy.** Applies to ANY scope-expansion decision in ANY
+     project: adding a data source, expanding a model's allowed actions, enabling a new
+     feature surface, promoting a stage to production. The asymmetry — "doing something
+     looks like progress; doing nothing is invisible" — is the bias being controlled
+     for. Codify the gate, not the discipline.
+
+  7. **Anti-pattern:** confusing the operator asking a leading question ("can we expand
+     to SELLs?") for a directive to expand. The question is the prompt to analyze, not
+     the conclusion. The honest answer to a leading question may be "I checked and no",
+     and that answer is more valuable than an enthusiastic yes that has to be walked
+     back.
+
+### 26. Memory claims about system state are hypotheses, not facts — verify against primary evidence before propagating
+
+- **Rule:** Before stating that a bug exists, a fix has not shipped, a feature is missing,
+  or a system behaves a particular way — and before propagating any such claim from a
+  session handoff, BACKLOG note, Decision Log entry, watchdog alert template, or other
+  second-hand source — you MUST verify against primary evidence (the code, the database,
+  the live system, a current log line). The verification artifact must appear in the
+  response BEFORE the claim, not after the user pushes back. A claim inherited from a
+  prior session is unverified work, regardless of how many sessions have repeated it.
+  Using CTDD vocabulary on an unverified claim is worse than skipping CTDD entirely
+  because it manufactures false confidence.
+
+- **Why:** 2026-05-28 — the PATS-Copy session handoff memory contained the false
+  statement "this bug has NEVER been fixed" about SELL-aware position sizing. The fix
+  had actually shipped 20 days earlier at commit `935d44f` with the BACKLOG item
+  closed Done on 2026-05-08. Today-Claude read the handoff, described the bug as
+  fact, generated a 3-option decision frame whose "Option C" recommended re-shipping
+  the fix, and only verified when the operator explicitly asked. The chain: the
+  watchdog rule at `~/claude-hq/watchdogs/pats/rules/runtime/low_priced_sell_max_loss.py`
+  lines 92-97 was frozen in pre-fix language ("Long-term fix is the sizer change") even
+  though its own comment lines 38-40 acknowledged the recalibration had shipped. Past-
+  Claude paraphrased that alert into the handoff as the bug being open. The handoff
+  entered today's session. The claim became "true" through repetition. This is the
+  **self-confirming-degradation** failure mode of LLM memory systems: a single false
+  claim survives indefinitely unless something forces verification against ground
+  truth. The operator's explicit CTDD invocation did NOT catch it because CTDD
+  vocabulary was applied to an unverified premise rather than the verification work
+  being done first. Token cost: ~100K tokens of incorrect explanation before the
+  operator pushed verification, plus the structural risk of nearly reverting an
+  already-shipped fix.
+
+- **How to apply:**
+
+  1. **Verify-then-state, never state-then-verify.** When about to assert "X is broken
+     / Y was never fixed / Z is missing" based on memory: pause, run the verifying
+     command (read the code, query the DB, pull the log), THEN state the claim
+     prefixed with the verification artifact. Example: "Verified at commit
+     `935d44f`: SELL-aware cap exists and was applied. Now describing the actual
+     issue..."
+
+  2. **Stale-claim sweep at session start.** When opening a project with a handoff
+     memory: grep the handoff for trigger words — `NEVER|never been|broken|TODO|
+     long-term fix|unfixed|needs to be fixed|not yet` — and treat each hit as a
+     hypothesis. Resolve each to VERIFIED-STALE / VERIFIED-CURRENT / NEEDS-
+     INVESTIGATION before describing it to the user. Fix stale ones in the handoff
+     IN THE SAME SESSION so the next session inherits truth, not stale claims.
+
+  3. **Quote machine output verbatim, never paraphrase. Every "broken / unfixed
+     / TODO / NEVER fixed" claim in an outgoing handoff MUST carry a verification
+     artifact alongside it** — a commit hash, a `file.ext:LINE` reference, a log
+     line with timestamp, a query result. If a future session can't reproduce the
+     artifact, the claim is auto-stale and flagged for resolution. Paraphrases
+     drift across sessions; artifacts don't. Example required form: handoff says
+     `<alert at 2026-05-28 02:21:08>: "MaxLossMonitor: position 232add3a..."` +
+     `(verified at signal-executor.ts:208 — capByMaxLoss applied; bug NOT open)`.
+     Bad form: `"watchdog references the SELL-aware sizing BACKLOG item as the
+     long-term fix"` — pure paraphrase, no artifact, becomes a self-confirming
+     false claim in the next session (this is exactly how the 2026-05-28 failure
+     happened).
+
+  4. **Watchdog alerts that reference open work-items must fetch live status.**
+     Hardcoded "long-term fix is X" or "see BACKLOG item Y" text in alerts
+     becomes a false claim the moment X ships or Y closes. Either fetch status
+     at alert time, or remove the prescriptive language entirely and describe
+     only the observation. Today's incident root cause was a frozen prescriptive
+     string surviving past the fix it described.
+
+  5. **Pairs with Lesson 21 (memory probe) and Lesson 25 (verify before
+     recommending).** Lesson 21: load relevant memory at task start. Lesson 25:
+     verify scaled-outcome before scope-expansion recommendations. Lesson 26:
+     verify system-state claims before propagating them. Together they close the
+     load → claim → recommend → ship pipeline. Without Lesson 26, memory becomes
+     self-confirming and degrades over time as false claims survive while truth
+     gets paraphrased away.
+
+  6. **Anti-pattern:** treating "the handoff says X" as equivalent to "X is true."
+     Handoffs are hypotheses about state. Code is state. Trust the code. The user
+     gains nothing from a session that confidently propagates yesterday's
+     misunderstanding.
+
+  7. **Operator-side gate:** the operator's CTDD invocation is not a substitute
+     for the discipline. If you find yourself using CTDD vocabulary on an
+     unverified premise, stop and verify FIRST. CTDD label on unverified work is
+     theatre, and theatre is worse than no-CTDD because it manufactures false
+     confidence that's harder to walk back.
+
+### 27. Every recommendation invokes `ctdd-precheck` skill BEFORE being surfaced — no exceptions
+
+- **Rule:** Before surfacing ANY recommendation to the operator — close/hold/exit/expand/ship/kill/promote/disable decisions, A/B/C/D option menus, "I recommend X" statements, "we should do Y" framings, claims about system state — you MUST invoke
+  `Skill(skill="ctdd-precheck", args="<class>: <recommendation summary>\n<supporting data>")` first and let the skill's verdict shape the response. The skill's output drives whether to surface a single dominant action, a genuine menu, or nothing at all. Ignoring the verdict = skill was theatre. Skipping the skill entirely = Lesson 26-class failure (vocabulary without discipline).
+
+- **Why:** 2026-05-28 — in a single 90-minute window I surfaced three "obvious" recommendations to the operator on the same decision: Option C (re-ship a fix that had already shipped 20 days earlier — Lesson 26 failure), Option D (close one position + hold another for an EV-zero extra $22 with a 6% tail-risk of -$316 — sloppy reach for "best of both worlds" without computing dominance), Option A (close both — the actually correct answer, only surfaced after operator pushback on D). Each "obvious" answer was wrong or weak at the moment it felt obvious. The operator caught both wrong answers. If autonomy had executed when each answer felt right, the bot would have shipped D (held #5 with 6% tail for no expected return). The structural fix is to put the mechanical math BEFORE the recommendation, not after. Token cost of today's incident: ~150K tokens + the operator's confidence in the system. Structural cost if uncorrected: every "obvious" call ships sloppy reasoning that the operator must catch. The user's framing was precise: "the whole idea is that everything is handled, with me being hands off, but THE RIGHT CALLS are made. nothing sloppy, all competent calls, nothing that causes detriment to high success rates."
+
+- **How to apply:**
+
+  1. **The skill at `~/.claude/skills/ctdd-precheck/SKILL.md` is now MANDATORY** for the recommendation classes it covers. Four classes: (1) close-vs-hold-vs-action on existing positions, (2) scope-expansion (add wallet, enable strategy, etc.), (3) system-state claims, (4) catch-all for other decisions. Each class has explicit mechanical checks and required artifacts.
+
+  2. **Invoke BEFORE drafting the recommendation.** The skill's verdict shapes the recommendation; if you draft first and invoke second, the skill becomes ceremony. The order is: gather inputs → invoke skill → read verdict → write recommendation per verdict.
+
+  3. **The verdict is binding.** If verdict is DOMINATED, do not offer the dominated option in a menu. If verdict is REJECTED, the answer is "no" — do not creatively reframe to ship anyway. If verdict is VERIFIED_STALE, surface the correction, not the original claim. If verdict is BLOCK, do not surface at all — get the missing inputs first.
+
+  4. **Inline the artifacts in your response.** The skill emits structured outputs (EV math, gate-pass list, verification artifact). Include them inline so the operator can audit your reasoning at a glance. Hidden math is unauditable math; unauditable math drifts into vibes.
+
+  5. **No exception for "this is obvious".** Today's incident proved "obvious" is a feeling that arrives after analysis, not before. The skill IS the analysis. Skipping for "obvious" = skipping the analysis = back to today's failure mode.
+
+  6. **No exception for time pressure.** The skill takes seconds. The walk-back of a wrong "obvious" recommendation takes minutes-to-hours plus operator confidence. Net throughput is higher with the skill.
+
+  7. **Pairs with Lessons 21 (memory probe), 25 (6-gate scope expansion), 26 (verification artifact for claims).** The full pipeline: probe memory at task start → load relevant context → invoke ctdd-precheck before each recommendation → surface result per verdict → operator decides on genuine choices only. Together, this is what "CTDD as discipline, not vocabulary" looks like.
+
+  8. **Anti-pattern A:** Invoking the skill and then ignoring its verdict ("the skill says DOMINATED but I'm going to offer hold anyway because the operator might want it") — operator can ALWAYS override; presenting dominated options proactively trains operator to wade through noise.
+
+  9. **Anti-pattern B:** Using the skill as documentation of an already-made decision ("here's why D is the right call, validated by ctdd-precheck") — the skill is upstream of the decision, not downstream documentation.
+
+  10. **Adoption signal (per Lesson 20):** measure `recommendations_made_without_skill_invocation` over the next 14 days. Default action if signal > 0 after 14 days: build the watchdog rule that catches violations in transcripts (deferred Layer 3). Default action if signal = 0: skill has hardened into discipline; no further enforcement needed.

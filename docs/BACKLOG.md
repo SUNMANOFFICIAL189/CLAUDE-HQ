@@ -1125,3 +1125,136 @@ Doctrinally (per feedback memory `feedback_automate_when_rules_airtight.md`, 202
 - This BACKLOG entry flips to `[Done]` when either (a) first actual use begins, or (b) explicit rejection in favour of another framework is documented
 
 **Source:** 2026-05-13 three-repo evaluation. Full context in memory file `project_repo_eval_agent_native.md`.
+
+---
+
+## [Open] — 2026-05-14 — Moodboard generator: upgrade upload panel to IndexedDB persistence
+
+**What:** Replace session-only (in-memory blob URL) storage for the "My uploads" panel in moodboard-generator with IndexedDB-backed persistence so that uploaded image pools survive page refresh, tab close, and browser restart.
+
+**Why deferred:** Sunil is pressed for time on another project. Option A (session-only) ships now; Option B (IndexedDB) ships later when bandwidth allows. The "BACKLOG.md is canonical 'note for later'" rule applies (Lesson 18).
+
+**Why it matters when triggered:** The whole point of dumping a curated image pool is to iterate over multiple sessions. Losing the pool on accidental refresh defeats the workflow. Folder drops of ~50 high-res photos (~100 MB) cannot fit in localStorage (~5-10 MB cap) — IndexedDB is the only viable browser-native option for this volume.
+
+**Estimate:** ½ to 1 day of focused work.
+
+**How to start (when triggered):**
+1. Install `idb` (Jake Archibald's IndexedDB wrapper, ~1 KB MIT, present in moodboard worktree's allowlist by virtue of being mainstream).
+2. Create `lib/upload-store.ts` (~100 lines) — schema `{ id: string, blob: Blob, mime: string, originalName: string, uploadedAt: number, vibeTags?: VibeTagPayload }` keyed by SHA-256 content hash.
+3. Refactor the "My uploads" tab to read/write through `upload-store.ts` instead of the in-memory map currently shipped (post-Option-A).
+4. Add `URL.createObjectURL` lifecycle management — revoke on unmount to prevent memory leaks (well-known footgun).
+5. Add a "Clear uploads" affordance in the panel UI (housekeeping).
+6. Handle `QuotaExceededError` gracefully (rare, but possible on massive volumes).
+7. Migration: existing in-memory uploads from a live session are simply discarded on reload — no formal migration needed since Option A is session-only by design.
+
+**Acceptance:**
+- Drop 30+ images, refresh the page → panel still populated, thumbnails render.
+- "Clear uploads" empties the panel and IndexedDB store cleanly.
+- No memory leaks (verify via Chrome DevTools Memory tab — object URL count returns to zero after closing panel).
+- Quota-exceeded path shows a plain-English error (Lesson 16), not a stack trace.
+- BACKLOG entry flips to `[Done]`.
+
+**Source:** 2026-05-14 moodboard v2 enhancement scoping. CTDD comparison surfaced Option A vs B; user opted for A now, B parked here for future integration.
+
+---
+
+## [Open] — 2026-05-28 — Investigate secret-shaped strings in Fleet Decision Log
+
+**What:** Local secret scrubber halted on `JARVIS-BRAIN/Projects/ai-agent-fleet-ventures/04 Decision Log.md` — reports secret-shaped strings detected. Pre-existing as of today's run (not introduced by insta-notion-sync work).
+
+**Why:** Per Lesson 14 doctrine, secrets shouldn't live in vault files. Either the strings are real (need scrubbing + rotation) or false positives (need allowlisting in the scrubber config). Vault git backup pushes to private GitHub repo `SUNMANOFFICIAL189/jarvis-brain` — if real, the impression is already on a remote.
+
+**Estimate:** 15–30 min triage.
+
+**How to start:**
+1. Grep the file for the scrubber's known patterns: `grep -E 'AIza[A-Za-z0-9_-]{35}|sk-ant-|ghp_|sk-[A-Za-z0-9]{32,}|AKIA[0-9A-Z]{16}' "$VAULT_PATH/Projects/ai-agent-fleet-ventures/04 Decision Log.md"`
+2. If real secrets: rotate at source, scrub the file, force-push the vault repo (rewrite history), and rotate the impression-exposed credentials per Lesson 14 procedure.
+3. If false positives (regex literals being discussed in design docs): add the file to scrubber allowlist or wrap the literals in code fences with a known-FP marker.
+
+**Acceptance:** Scrubber `vault: HALT` line no longer triggers for this file. BACKLOG entry flips to `[Done]`.
+
+**Source:** 2026-05-28 insta-notion-sync build session — scrubber ran for key-rotation cleanup, flagged this as side-finding. Discovered, not caused.
+
+---
+
+## [Open] — 2026-05-28 — Trust Gate parser: substring-matches "pip install" anywhere in command
+
+**What:** `scripts/trust-gate.sh` flags any bash command containing the literal string `pip install` regardless of where it appears — including inside `echo` strings and code comments. Two false positives hit during the insta-notion-sync build:
+1. `echo "=== Installing project deps ===" ; pip install ...` → parsed `Installing` as a flag, `project` as author → BLOCK.
+2. `pip install --upgrade pip` (the SDK self-upgrade convention) → parsed `--upgrade` as author → BLOCK.
+
+**Why:** The hook should match `pip install` only as the *start of a command word* (i.e., the executable being run), not as a substring anywhere on the line. Today's behaviour produces noisy false positives that erode trust in the gate, leading to reflexive `HQ_TRUST_OVERRIDE=1` use — which defeats the whole point of the gate.
+
+**Estimate:** 30–60 min. Same parser-class problem as Lesson 7 (`git clone` URL extraction) — needs proper tokenisation, not regex substring match.
+
+**How to start:**
+1. Reproduce: `bash -c 'echo "pip install foo" ; ls'` — should NOT trigger; today it does.
+2. Refactor `parse_pip_install` in `trust-gate.sh` to:
+   - Tokenise the full command with Python `shlex` (same pattern as `parse_git_clone_url` after the 2026-04-21 fix).
+   - Walk tokens; require `pip` to be a command-position token (immediately after `;`, `&&`, `||`, `|`, or at the line start), followed by `install`.
+   - Skip flags-with-values explicitly: `--upgrade`, `--user`, `--no-deps`, `--no-cache-dir`, `--target N`, `-r REQ`, `-c CONS`, `-e .`, etc.
+3. Add a regression test: a fixture command with `echo "pip install foo"` followed by a real shell command should not block.
+4. Mirror the fix for `npm install`, `pipx install`, `cargo install`, and any other "<tool> install <pkg>" parsers — same shape, same bug class.
+
+**Acceptance:** All five reproduction cases pass (real installs of unknown-author packages still block; echo-string-containing-install-words no longer blocks).
+
+**Source:** 2026-05-28 insta-notion-sync build. Lesson 7 already established the parser-discipline rule for `git clone`; this is the same fix applied to `pip install` and friends. Override used today: `HQ_TRUST_OVERRIDE=1` for google-genai, notion-client, python-dotenv — all canonical, trusted publishers, logged.
+
+---
+
+## [Open] — 2026-05-28 — PATS-Copy: wallet-watch.py daily rotation-alert TG ping
+
+**What:** Extend `scripts/wallet-watch.py` with a post-snapshot rotation-alert mode. After the daily snapshot writes, apply LESSONS.md #25 6-gate to each watched wallet (currently 9: 1 TIER_1 StarMaster + 8 TIER_2). Emit plain-English TG alerts (per Lesson 16) when either condition fires:
+1. **TIER_1 wallet fails any 6-gate** — immediate concern, surface for operator review (potential demotion/pool reduction).
+2. **TIER_2 wallet passes ALL 6-gates for 4+ consecutive daily snapshots** — promotion candidate, surface for operator rotation decision.
+
+**Why:** Phase 1.5 rotation (2026-05-28) made it operationally meaningful: now that we know wallets can be rotated cleanly, the bottleneck is detecting WHEN to rotate. The 6-gate is mechanical and already implemented in `cmd_compare`; just needs to fire daily off the snapshot output instead of requiring manual `compare` invocation. The "4+ consecutive days" threshold avoids whipsawing on single-snapshot variance.
+
+**Estimate:** 30–60 min. Mostly composing existing `cmd_compare` gate logic into a `cmd_alert` mode + Telegram send + state tracking for "consecutive days passed" via a small JSON cursor file.
+
+**How to start:**
+1. Read `scripts/wallet-watch.py` `cmd_compare` (lines 350-410) — gate logic already exists.
+2. Add `cmd_alert(snapshot_path)` that reads the snapshot, applies the 6 gates per wallet, compares to a state file at `logs/wallet-snapshots/.alert-state.json` for consecutive-days tracking.
+3. For TIER_1 wallet failing any gate: TG fire immediately (no state needed).
+4. For TIER_2 wallet passing all 6: increment its `consecutive_pass_days` counter; if ≥4, fire TG with promotion candidate framing; reset on first fail.
+5. Update the `com.pats.wallet-watch` launchd plist to chain `python wallet-watch.py snapshot` followed by `python wallet-watch.py alert <newest-snapshot>`.
+6. Plain-English template per Lesson 16: `what_happened` + `what_to_do` fields.
+
+**Acceptance:**
+- StarMaster's snapshot today (still passing) → no alert fires (he's the active TIER_1)
+- A simulated TIER_1 fail (manually edit snapshot file) → fires TG alert with `what_to_do: "review wallet X in watchlist.ts, consider pool reduction or demotion"`
+- A simulated 4-day TIER_2 pass streak → fires TG alert with `what_to_do: "consider promotion; first run Path B if not already built"`
+- Launchd job runs daily 07:00 UTC, alert fires within minutes if conditions met
+
+**Source:** 2026-05-28 Phase 1.5 rotation deploy. Operator explicitly asked for "keep track of other wallets simultaneously, to understand if another rotation needs to take place." Deferred to follow-on session per LESSON 27 (don't ship sloppy on tired attention after 12+ hour session).
+
+---
+
+## [Open] — 2026-05-28 — PATS-Copy: per-feed RSS circuit breaker in NewsScanner
+
+**What:** Add per-feed exponential-backoff circuit breaker to `src/signals/news-scanner.ts`. After N consecutive failures on a feed (default N=5), disable that feed for an exponentially increasing cooldown period (15s → 60s → 5min → 30min → 1h, capped). Reset counter on successful fetch.
+
+**Why:** DL News was removed today (2026-05-28) because its SSL cert is misconfigured server-side. Without a circuit breaker, the bot retried every 15 seconds indefinitely, producing 5,760 log lines/day of pure noise (which also burned CPU on doomed `fetch + AbortController` setup). A general circuit-breaker pattern would have:
+1. Auto-stopped the doomed retries within 1-2 minutes of detection
+2. Surfaced "feed X disabled after N failures" as a single TG alert (per Lesson 16) instead of buried log noise
+3. Future-proofed against any other feed cert expiry / discontinuation
+
+The next feed to die (statistically inevitable for 19 external sources) will repeat today's failure pattern unless this lands.
+
+**Estimate:** 1–2h. Touches one file (`news-scanner.ts`); add `Map<feedName, {failCount, nextRetryAt, backoffMs}>`; `fetchRSS` checks `nextRetryAt > now` before attempting; catches increment `failCount` and double `backoffMs`. Plain-English TG alert on feed-disable per Lesson 16.
+
+**How to start:**
+1. Extend `RSSFeed` interface or add a parallel `feedState: Map<string, FeedState>` field on `NewsScanner`.
+2. In `poll()`, filter feeds where `state.nextRetryAt > Date.now()`.
+3. In the per-feed catch, increment counter + compute next retry via `Math.min(state.backoffMs * 2, 3_600_000)`.
+4. After 5 consecutive failures, fire a single TG alert: `"Feed X disabled after 5 failures (cert/network/source issue). Will retry in Y minutes. Other 18 feeds unaffected."`.
+5. On successful fetch, reset counter + backoff to default 15s.
+6. Unit test the backoff math in isolation (pure function).
+
+**Acceptance:**
+- A test fixture feed that always throws → disabled after 5 attempts within 75 seconds.
+- Real feeds with intermittent failures (1-2 in a row, then success) → backoff stays at default.
+- TG alert fires exactly ONCE per disable event, not on every subsequent failed poll.
+- Re-enabled feed (caught up) → resumes normal polling.
+
+**Source:** 2026-05-28 DL News removal. Operator explicitly asked for the immediate fix (remove DL News); the general fix pattern (per-feed circuit breaker) is the structural answer that prevents the next occurrence. Lesson 7/24-class problem: a minimum-diff fix today protects against one specific failure; the architectural fix protects against the failure class.

@@ -90,10 +90,13 @@ def main() -> int:
             f"({sample['max_loss_pct_of_balance']:.1f}% of portfolio)."
         ),
         what_to_do=(
-            "Check the BACKLOG item 'PATS-Copy: SELL-aware position sizing' and "
-            "decide whether to manually close the flagged position(s) or wait. "
-            "Long-term fix is the sizer change — open SELLs at low prices should "
-            "be capped by max-loss, not just dollar amount."
+            "The SELL-aware sizer cap (shipped 2026-05-08 commit 935d44f) ran at entry "
+            "and these positions were sized inside the 5% cap relative to balance AT ENTRY. "
+            "This alert fires because balance has eroded since then, making the locked-in "
+            "max-loss now exceed 5% of the smaller current balance. Decision is portfolio-level "
+            "(close to realize, hold to let resolve), not a code bug. Pull current YES prices "
+            "for each flagged position to assess close-now P&L vs hold-to-resolution EV before "
+            "acting."
         ),
         technical_detail={
             "rule_id": RULE_ID,
