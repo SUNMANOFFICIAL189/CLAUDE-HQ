@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-05-28",
+  "last_updated": "2026-05-30",
   "description": "Projects watched by the HQ Watchdog. Each entry is one project the watchdog ingests commits, sessions, and (optionally) lessons for. claude-hq is the default project \u2014 used as fallback when no project is specified, but holds no special status in the code.",
   "projects": [
     {
@@ -40,7 +40,15 @@
       "repo_path": "/Users/sunil_rajput/projects/insta-notion-sync",
       "lessons_path": null,
       "added": "2026-05-28",
-      "notes": "IG saved-videos to Notion auto-sync. Android share intent → Notion DB → Mac LaunchAgent (every 15 min) → yt-dlp + Gemini 2.5 Flash → enriched Notion entry. Forward-only (no backfill). Free tier (Gemini AI Studio, no card). Plan B fallback: local Whisper + Claude Haiku. Layers 0+A+B; not C/D. lessons_path null — project-local lessons in vault, HQ-wide stay in commander/LESSONS.md."
+      "notes": "IG saved-videos to Notion auto-sync. Android share intent \u2192 Notion DB \u2192 Mac LaunchAgent (every 15 min) \u2192 yt-dlp + Gemini 2.5 Flash \u2192 enriched Notion entry. Forward-only (no backfill). Free tier (Gemini AI Studio, no card). Plan B fallback: local Whisper + Claude Haiku. Layers 0+A+B; not C/D. lessons_path null \u2014 project-local lessons in vault, HQ-wide stay in commander/LESSONS.md."
+    },
+    {
+      "name": "flightclub-legal-tax-advisor",
+      "display_name": "flightclub.33 Tax Advisor",
+      "repo_path": "/Users/sunil_rajput/projects/flightclub-legal-tax-advisor",
+      "lessons_path": null,
+      "added": "2026-05-30",
+      "notes": "Internal cited decision-support tax-advisory tool for flightclub.33 zero-tax-structuring arm. name matches dir basename for session-file ingestion. Pre-build as of 2026-05-30: research complete, PRD next. Living knowledge base \u2014 continuously evolved as laws change. Layers 0+A(light)+B; not C/D (decision-support, not autonomous capital agent)."
     }
   ]
 }
