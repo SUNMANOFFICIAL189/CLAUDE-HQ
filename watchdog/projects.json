@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-05-30",
+  "last_updated": "2026-06-03",
   "description": "Projects watched by the HQ Watchdog. Each entry is one project the watchdog ingests commits, sessions, and (optionally) lessons for. claude-hq is the default project \u2014 used as fallback when no project is specified, but holds no special status in the code.",
   "projects": [
     {
@@ -49,6 +49,14 @@
       "lessons_path": null,
       "added": "2026-05-30",
       "notes": "Internal cited decision-support tax-advisory tool for flightclub.33 zero-tax-structuring arm. name matches dir basename for session-file ingestion. Pre-build as of 2026-05-30: research complete, PRD next. Living knowledge base \u2014 continuously evolved as laws change. Layers 0+A(light)+B; not C/D (decision-support, not autonomous capital agent)."
+    },
+    {
+      "name": "OFFLIMITS",
+      "display_name": "OFFLIMITS",
+      "repo_path": "/Volumes/Elements/My_Stuff/OFFLIMITS",
+      "lessons_path": null,
+      "added": "2026-06-03",
+      "notes": "Content agency (renamed from OFFSCRIPT). git repo content-creation-agency; canonical copy MOVED to the external drive 2026-06-03, so repo_path is only readable when /Volumes/Elements is mounted (watchdog skips it when the drive is unmounted). Worked mainly via Cowork, so Claude Code session-file ingestion may not capture sessions; commit-watching works when mounted. Hybrid asset policy (raw image pools drive-only). Layers 0+A+B."
     }
   ]
 }
