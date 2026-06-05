@@ -126,3 +126,10 @@ constant in STEP 1 for next time. The system learns its own cost.
   (91% of burn is input). Give each agent a tight brief + targeted reads.
 - **Documented-but-dormant guardrails** — if a control can't actually fire, say so plainly
   (the §7 lesson). Do not manufacture false confidence.
+- **Read-only/design runs that don't forbid writes** — agents have Write access. If a design
+  or analysis run is meant to RETURN content (not mutate the repo), the brief must say
+  explicitly: "do NOT write/edit any files; return content only." Lesson from the 2026-06-05
+  flightclub P1 shakedown: 4 design agents were told to "produce" files; some wrote to disk
+  and some didn't, leaving an incoherent half-written tree. Parallel file-writes also conflict.
+  Rule: **the orchestrator integrates the verified blueprint single-agent**; design agents return,
+  they don't write.
