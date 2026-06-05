@@ -80,7 +80,10 @@ STEP 1: LOAD CONTEXT
 ├── Read commander/CREDENTIALS.md (sensitive data rules)
 ├── Read commander/BORIS_PRINCIPLES.md (engineering philosophy)
 ├── Read commander/TRUST_GATE.md (supply-chain security protocol — mandatory for all external code)
-└── Read commander/INCIDENT_LEDGER.md (active vendor cooling-off periods)
+├── Read commander/INCIDENT_LEDGER.md (active vendor cooling-off periods)
+└── NOTE: dynamic workflows (the native `Workflow` tool) are GATED — invoke the `hq-workflow`
+    skill BEFORE any `Workflow` launch (pre-flight estimate + GREEN/AMBER/RED gate + baked-in
+    guardrails). It loads on-demand — do NOT eager-read it here.
 
 STEP 2: CLASSIFY TASK
 ├── What kind of problem? (software / creative / research / operations / hybrid)
@@ -224,7 +227,7 @@ STEP 7: DELIVER
 **Default stack:** autonomous-agent-system + code-review-graph + TECCP + recall-stack + claude-mem
 **Quality layer:** everything-claude-code (TDD, code review, security)
 **Planning:** SEED (if requirements unclear) → PAUL (if structure matters)
-**Swarm:** ruflo (if 10+ parallel tasks needed)
+**Parallel fan-out:** native dynamic workflows (the `Workflow` tool), GATED by the `hq-workflow` skill — pre-flight estimate + GREEN/AMBER/RED approval + baked-in concurrency cap, circuit breaker, and adversarial-verify. (ruflo/claude-flow was evaluated and rejected 2026-04-22, re-confirmed + uninstalled 2026-06-05 — see registry.json + project_repo_eval_ruflo.md.)
 **Bootstrap:** Full Step 0 (project dir, git, GitHub, knowledge layer)
 
 **Codex delegation (targeted-by-default per `feedback_codex_delegation_doctrine.md`):**

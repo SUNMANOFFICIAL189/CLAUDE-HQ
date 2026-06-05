@@ -29,7 +29,7 @@
 BEFORE any agent selects a tool, API, service, or dependency:
 
 1. COST CHECK: Does this cost money?
-   ├─ NO → Proceed
+   ├─ NO → go to step 2 (money is not the only cost — quota is too)
    └─ YES → HALT
        ├─ Search for free alternatives (web search, GitHub, HuggingFace)
        ├─ Evaluate: Can a free alternative deliver the same result?
@@ -44,6 +44,17 @@ BEFORE any agent selects a tool, API, service, or dependency:
            ├─ APPROVED → Proceed, log approved expenditure
            ├─ REJECTED → Find another way or adjust scope
            └─ "Find cheaper" → Research deeper, report back
+
+2. QUOTA CHECK: Will this burn significant Anthropic quota? (the flat-rate Max-plan blind spot)
+   On a flat-rate plan, token-heavy work returns NO to step 1 and would otherwise always
+   Proceed — this is exactly how the 2026-04-28 5h-window blowup happened.
+   ├─ Is this a parallel/multi-agent job (dynamic workflow, fan-out, swarm)?
+   │   └─ YES → invoke the `hq-workflow` skill FIRST. Estimate tokens = agents × per-agent.
+   │            Apply its GREEN/AMBER/RED gate. AMBER/RED require operator approval BEFORE launch.
+   └─ Is this a single large job (long autonomous loop, big file sweep)?
+       └─ Estimate the burn. If it could consume a large share of the 5h window, surface the
+          estimate + recent usage and WAIT for operator approval. Log REAL tokens after (not
+          budget.spent() — it undercounts ~11×). See MODEL_ROUTING.md §7 (manual quota watch).
 ```
 
 ### Model Routing

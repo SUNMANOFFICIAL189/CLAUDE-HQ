@@ -121,34 +121,35 @@ so it's never ambiguous what the routing layer is doing.
 
 ---
 
-## 7. Quota awareness (Phase 4 — defined here, activated when scaffolded)
+## 7. Quota awareness (MANUAL — there is no reliable automatic quota read)
 
-**Trigger condition:** Anthropic Max 5-hour rolling window > 80% consumed.
+> **Honesty note (2026-06-05):** This section previously described an *automatic* downgrade at
+> >80% window consumption, marked "activated when scaffolded." That was a documented-but-dormant
+> guardrail — it could never fire, because **there is no reliable programmatic read of the
+> Anthropic Max 5-hour rolling window** (verified 2026-06-05; no clean `claude usage` token
+> number is exposed). A guardrail that can't fire manufactures false confidence (LESSONS rule 26).
+> So this is now an honest **manual** protocol, not a fake automatic one.
 
-**Source of truth:** TBD by Phase 4 implementation. Candidates:
-- `claude usage` CLI subcommand (if exposed)
-- Read from Claude Code's local usage telemetry
-- Periodic API ping with token counting
+**What we CAN'T do:** auto-detect "80% consumed" and silently downgrade. No source of truth exists.
 
-**Action when triggered:**
+**What we DO instead (manual quota watch):**
 
-| Current chosen tier | Degraded tier | Notes |
-|---|---|---|
-| Opus | Sonnet | Unless on hard floor (§4) → no change |
-| Sonnet | Haiku | |
-| Haiku | Haiku | Already lowest |
+1. **Operator watches `/usage`.** The human is the quota sensor — the Commander is blind to it.
+2. **Pre-flight estimate is mandatory for any parallel/large job.** Before a dynamic workflow,
+   fan-out, or long autonomous loop, estimate the burn (`hq-workflow` skill does this for
+   workflows) and surface it. AMBER/RED jobs WAIT for operator approval (see COST_CONTROL.md
+   step 2 + the `hq-workflow` GREEN/AMBER/RED gate).
+3. **Default to the cheaper tier under uncertainty.** When unsure how much window is left, route
+   grunt work to Haiku/Sonnet and reserve Opus for hard-floor tasks (§4). Cheaper-by-default is
+   the standing posture, not a triggered exception.
+4. **Offload token-heavy phases to Codex** where appropriate — separate billing pool, does not
+   touch the Max window (propose, don't auto-invoke, per the Codex delegation doctrine).
+5. **Log REAL tokens after every workflow** from the task-notification `usage.subagent_tokens`
+   (NOT `budget.spent()`, which undercounts ~11×) into the §8 ledger, so burn becomes visible
+   in hindsight even though it isn't readable in advance.
 
-**Alert:** PlainAlert via Telegram per Lesson 16. Banned-word list applies. Template:
-
-```
-🌡️ Heads up — running closer to the Anthropic limit
-
-Used about 80% of the 5-hour budget. Until it resets in about an hour, I'm going to use a smaller model for routine work to leave headroom for important stuff.
-
-What to do: nothing needed. If you'd rather I keep using the bigger model, reply "keep big".
-```
-
-If user replies "keep big" → hook sets `HQ_QUOTA_AWARENESS=off` for the session.
+**If/when a real quota API appears**, this section can be upgraded to automatic — but only once
+the source of truth is verified to actually return live numbers. Until then: manual, honest.
 
 ---
 
