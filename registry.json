@@ -144,9 +144,10 @@
         "command": "npm install -g claude-flow",
         "alternative": "Clone repo and follow README setup"
       },
-      "integration_notes": "Heavy-duty alternative to autonomous-agent-system for enterprise-scale builds. Use when you need swarm coordination, not just sequential micro-tasks. Pairs well with claude-mem for persistent memory across agent swarms.",
-      "priority": "MEDIUM",
-      "status": "active",
+      "integration_notes": "NOT INTEGRATED. ruflo is claude-flow renamed (the dormant claude-flow@3.5.21 binary was this; uninstalled 2026-06-05). Evaluated and rejected for HQ: (1) duplicates the existing knowledge layer (claude-mem + MemPalace + recall-stack + Obsidian + code-review-graph); (2) ambient autonomy (12 always-on background workers + self-learning + federation) is a quota-burn risk matching the 2026-04-28 incident; (3) curl|bash install + 210-tool autonomous surface are Trust Gate concerns. Use NATIVE Claude dynamic workflows (the Workflow tool) instead for in-session orchestration. Full eval: memory project_repo_eval_ruflo.md.",
+      "priority": "NONE",
+      "status": "dormant-rejected",
+      "decision_log": "2026-04-22 decided against integration (framework-overhead-without-clear-gain, bundled w/ seed/paul/TECCP). 2026-06-05 re-evaluated against full repo + vindicated; superseded by native dynamic workflows.",
       "added_date": "2026-03-17"
     },
     {
