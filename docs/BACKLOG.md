@@ -1258,3 +1258,39 @@ The next feed to die (statistically inevitable for 19 external sources) will rep
 - Re-enabled feed (caught up) → resumes normal polling.
 
 **Source:** 2026-05-28 DL News removal. Operator explicitly asked for the immediate fix (remove DL News); the general fix pattern (per-feed circuit breaker) is the structural answer that prevents the next occurrence. Lesson 7/24-class problem: a minimum-diff fix today protects against one specific failure; the architectural fix protects against the failure class.
+
+---
+
+## [Done] — 2026-06-05 — /capture skill (frictionless capture inbox)
+
+**What:** Built `/capture` skill — frictionless dump → never-lose (append to `captures/INBOX.md`) → auto-categorize (TASK/IDEA/REFERENCE/NOTE/EVENT) → route to HQ homes (BACKLOG / memory / Obsidian) → archive-never-delete. Stolen from the Obsidian Personal OS eval (`project_eval_obsidian_personal_os.md`), adapted to HQ's existing homes (not the doc's 8-folder vault). Canonical in `skills/capture/`, symlinked to `~/.claude/skills/capture`, on main + feature branch.
+
+**Why:** HQ had no frictionless capture→auto-file flow — only manual BACKLOG edits. This was the strongest gap surfaced by the eval; completes the `/sync` + `/save` + `/capture` persistence family.
+
+---
+
+## [Open] — 2026-06-05 — Scheduled morning briefing + weekly review digests
+
+**What:** Stand up two scheduled digests (from the Obsidian Personal OS eval): a brief morning "most important action + open loops + project status" and a Sunday weekly review (what progressed/stalled + next-week priorities). Reuse the deferred weekly routing-digest spec (MODEL_ROUTING §8) + watchdog/telegram.py; deliver via `/schedule` or a LaunchAgent. PlainAlert/Lesson-16 compliant.
+
+**Why:** HQ has the data (cost ledger, watchdog, project state) but no proactive daily/weekly surfacing. Overlaps the already-deferred "weekly Telegram routing digest" BACKLOG item — consider merging. Low-cost, high-visibility.
+
+**Estimate:** ~3-4 hours (generator + schedule + dry-run + jargon-lint). Pairs with the existing weekly-digest backlog item.
+
+**How to start:** Decide channel (Telegram vs chat vs file). Write the generator reading cost-ledger + watchdog state + active project handoffs. Schedule it. Dry-run before enabling.
+
+**Acceptance:** A morning + weekly digest fire on schedule, plain-English, no jargon, accurate against disk state.
+
+---
+
+## [Open] — 2026-06-05 — Personal-life vault layer (separate from dev projects)
+
+**What:** Evaluate building a dedicated personal-life knowledge/management layer (health, finances, relationships, career, personal admin) modelled on the Obsidian Personal OS doc — distinct from HQ's dev/project memory. Would organize currently-scattered personal projects (Malaysia residency, property hunt, FlightClub planning) under one life-OS taxonomy with capture + digests.
+
+**Why:** HQ is project/dev-centric; personal-life items live as loose memory files. The doc is a good blueprint for THIS specific gap. Bigger scope — a separate session. Only worth it if the operator wants life-management inside the system.
+
+**Estimate:** ~1 session to scope + scaffold the vault layer; ongoing to populate.
+
+**How to start:** Decide if in scope at all. If yes: scaffold a `Life/` area in the Obsidian vault with fixed folders, a single life `CLAUDE.md` SoT, wire `/capture` + `/save` + digests to it. Do NOT rebuild HQ's dev memory stack.
+
+**Acceptance:** Decision logged. If built: a life-OS layer exists, capture/save/digests work against it, personal projects migrated in.
