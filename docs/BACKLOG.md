@@ -1294,3 +1294,22 @@ The next feed to die (statistically inevitable for 19 external sources) will rep
 **How to start:** Decide if in scope at all. If yes: scaffold a `Life/` area in the Obsidian vault with fixed folders, a single life `CLAUDE.md` SoT, wire `/capture` + `/save` + digests to it. Do NOT rebuild HQ's dev memory stack.
 
 **Acceptance:** Decision logged. If built: a life-OS layer exists, capture/save/digests work against it, personal projects migrated in.
+
+---
+
+## [Open] — 2026-06-06 — PATS-Copy: upsertLeaders bulk upsert ON CONFLICT dup-key error
+
+**What:** `upsertLeaders` (`src/data/supabase.ts`) periodically logs `"upsertLeaders bulk upsert failed (20 rows): ON CONFLICT DO UPDATE command cannot affect row a second time"`. Pre-existing since the May 28 bulk-upsert refactor (commit `188e288`). Non-fatal — the catch handles it — but it means some scoring updates are silently dropped each time it fires.
+
+**Why:** Postgres' `ON CONFLICT DO UPDATE` semantics: if two rows in the same `INSERT` batch share the conflict-target value (here, `wallet_address`), Postgres refuses to update the same row twice in one statement. The bulk batch must have a duplicate. Most likely cause: the leaderboard scorer is returning the same wallet under two different ranks/categories in one rescore, OR there's case-sensitivity mismatch (we lowercase before insert but the original dataset has both cases).
+
+**Estimate:** 30-60 min. Deduplicate the input array by `wallet_address.toLowerCase()` BEFORE the upsert, picking the highest-`composite_score` row when duplicates exist.
+
+**How to start:**
+1. Reproduce by adding logging: `console.log(leaders.map(l => l.walletAddress.toLowerCase()).filter((x, i, a) => a.indexOf(x) !== i))` before the bulk upsert — see what's duplicate.
+2. Fix in `diffLeaders` or in the upsertLeaders call site: dedup by lowercase address before passing to `.upsert([...])`.
+3. Add a unit test in `scripts/test-leader-diff.ts` covering the dedup case.
+
+**Acceptance:** error log line stops appearing. All unique leaders still updated correctly.
+
+**Source:** 2026-06-06 Fix A deploy — error visible in post-deploy log scan. Surfaced, not caused.
