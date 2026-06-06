@@ -39,8 +39,11 @@ Gather and SHOW, concisely:
 - `git status --porcelain` (modified / untracked / **deleted**)
 - `git diff --stat` and `git diff --cached --stat`
 - **Deletions / renames of tracked files** — list these explicitly; they are the dangerous ones.
-- **Secret scan** — scan changed + untracked paths for `credential|\.env$|secret|\.key$|\.pem$`.
-  Any hit → STOP, do NOT stage it, tell the user.
+- **Secret scan** — two precise checks (NOT an unanchored `secret` substring, which
+  false-positives on legit modules like `secrets.py` — hit 2026-06-06 on flightclub P3):
+  (a) secret FILES by anchored name: `(^|/)\.env$`, `\.key$`, `\.pem$`, `credentials.*\.json$`;
+  (b) the staged DIFF content for real key material: `sk-ant-`, `AKIA[0-9A-Z]{16}`,
+  `-----BEGIN (RSA|OPENSSH|PRIVATE)`. Any hit → STOP, do NOT stage it, tell the user.
 - **Unexpected files** — flag backups, `.rtf`, caches, `*.db`, large binaries, `.venv`,
   anything that smells un-committable (the watchdog-clutter class).
 
