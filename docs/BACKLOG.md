@@ -1313,3 +1313,23 @@ The next feed to die (statistically inevitable for 19 external sources) will rep
 **Acceptance:** error log line stops appearing. All unique leaders still updated correctly.
 
 **Source:** 2026-06-06 Fix A deploy — error visible in post-deploy log scan. Surfaced, not caused.
+
+---
+
+## [Done] — 2026-06-08 — PATS-Copy: wallet-watch.py scaling-artifact filter for tiny positions
+
+**Resolved:** schema 1.7 shipped at PATS-Copy commit `c81438c`. Added `MIN_POSITION_SIZE_FOR_SCALED = $50` filter to wallet-watch.py — positions with leader `initialValue < $50` are excluded from `scaled_dollar_pnls` computation.
+
+Trigger: 2026-06-08 health check surfaced StarMaster's `worst_scaled_trade = -$1,499`. Investigation showed her actual position was $3 on a 2026 Peruvian presidential candidate that lost $97; the $50-scaling formula multiplied by $50/$3 = 16.7x produces the scary number. Pure math artifact, no real exposure.
+
+Verified: pre-filter StarMaster 6-gate failed 2/6 gates (Z=+0.46σ, worst=-$1,499); post-filter all 6 gates pass (Z=+2.15σ, worst=-$112). 24 tiny positions correctly excluded. Schema bumped 1.6 → 1.7, new diagnostic field `scaled_excluded_tiny_n`.
+
+---
+
+## [Done] — 2026-06-08 — PATS-Copy: Fix B signal-log JSONL for rejected-signal visibility
+
+**Resolved:** shipped at PATS-Copy commit `c81438c`. New file `/opt/polymarket-bot/data/signal-log.jsonl` (env-overridable via `SIGNAL_LOG_FILE`). Append-only, one JSON object per line. Records EVERY geopolitics `execute()` attempt with `disposition` (executed | blocked) + `reason` + leader/market/side/price/size/our_trade_id.
+
+Closes the visibility gap exposed by the "blocked=25" STATUS counter that had no per-rejection detail. Read with `tail -50 .../signal-log.jsonl | jq .`. Fire-and-forget; diagnostic channel never breaks trading path.
+
+Scope: geopolitics pipeline only (Phase 1). Signal pipeline visibility deferred. File will be created on first geopolitics signal attempt post-deploy.
