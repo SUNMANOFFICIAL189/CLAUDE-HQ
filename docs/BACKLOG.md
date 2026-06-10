@@ -1371,3 +1371,49 @@ From /proof-check pre-merge inspection (no CRITICAL/HIGH):
 ## [Open] — 2026-06-10 — proof-gate SEC_RX: anchor `payment` (LOW, non-blocking)
 
 From the re-/proof-check of proof-gate.sh v2 (CLEAR TO MERGE): `payments-readme.md` flags via the unanchored `payment` token in SEC_RX. Harmless over-flag (extra proof-check on a doc); anchor it like `auth`/`token`/`guard` were if it gets noisy.
+
+## 2026-06-10 — FC33 5a.3 proof-check residual (LOW)
+- Reconcile/curation POST bodies carry client PII over HTTPS (token in header, no logging today — SAFE as-written). **Watch when adding any frontend logging/telemetry middleware**: do not log POST bodies for `/reconcile` or `/curate`. Source: adversarial-review of curation UI, finding #8.
+
+## 2026-06-10 — FC33 vision: learning/template system (counterpart-validated → AI accelerator → graduated auto-gen)
+**Operator vision:** capture every counterpart-validated client plan → AI learns recurring patterns → builds templates → eventually generates the playbook/guide itself for "seen enough" situations, shrinking counterparts to paperwork-execution + doc-supply.
+**CTDD verdict (Class 4): SPLIT.**
+- ✅ APPROVED — build as a DRAFTING ACCELERATOR: validated-case corpus + similarity retrieval (pgvector, already planned) → AI proposes a precedent-grounded baseline → expert REVIEWS/CONFIRMS not analyses-from-scratch. Most of the time-saving, safely.
+- ⚠️ REWRITE the "without counterpart experts" end-state — NOT a blanket switch-off (worst case: unsigned AI tax plan reaches client + is wrong = the product's core promise breaks; pattern-match ≠ correctness: one fact flips outcome, law goes stale, automation bias). Safe form = operator's OWN doctrine [[feedback_automate_when_rules_airtight]]: auto-gen ONLY per-pattern, promoted by evidence (expert signs off AI draft ~unchanged across N cases), with a freshness check (law change → retire template) + a novelty gate (unusual client → back to human). Expert shifts author→validator; load shrinks to edge cases.
+**Foundation already being laid:** the 5a AI-baseline-vs-counterpart-final cross-check diff = the labelled training signal. RECORD each diff with provenance (expert, date, law/snapshot version, sources, client fact-pattern) — that's the dataset this needs. Prereqs: case volume + pgvector validated-case store + staleness invalidation + confidence/novelty gating. Build AFTER the counterpart pipeline (5b) is live and producing validated cases.
+
+---
+## 2026-06-11 — FLIGHTCLUB.33-WEBAPP-v2 Phase 5b Inc 2: doc_requests reminder audit-consistency (LOW)
+**Source:** adversarial-review of Inc 2 (doc_requests + reminder scheduler), Finding 3. Fresh-Claude-agent review (Codex blocked, OpenAI 401).
+**Finding (LOW):** `db.bump_reminder()` / `db.mark_doc_escalated()` run an UPDATE without a rowcount check. If a `doc_requests` row were deleted (e.g. case ON DELETE CASCADE) between `outstanding_doc_requests()` reading it and the bump, the audit log would record `doc_reminder_sent` for a row that no longer exists — an audit-trail inconsistency. NOT a safety issue: the reminder cap can't be exceeded (a gone row is never re-selected), no PII exposure, no data loss.
+**REJECTED fix:** the reviewer's suggested `raise ValueError on rowcount==0` is rejected — it would make `run_reminders` CRASH-HALT on a concurrently-deleted row, violating the "skip-not-crash / never take the whole scheduler down" contract. Worse than the symptom.
+**Safe fix (if/when addressed):** make `bump_reminder` return the rowcount and have `run_reminders` only emit the `doc_reminder_sent` audit when a row was actually updated (skip the audit on 0 rows). Cosmetic; defer until the scheduler is wired to a real cron trigger (Inc 3+).
+
+## 2026-06-11 — FC33 5b Inc2 reminder scheduler: concurrency guard (LOW, trigger-gated)
+- `reminders.run_reminders()` has no lock; two concurrent invocations could each read the same outstanding set and double-send. SAFE under the current design (single cron tick; Inc 2 isn't wired to any trigger yet). **Trigger to fix:** when Inc 3 wires an HTTP/cron trigger for the scheduler, add a guard (advisory lock / single-flight / `SELECT … FOR UPDATE SKIP LOCKED`). Source: adversarial-review of Inc 2 (finding #3, downgraded HIGH→LOW after verification — single-flight assumption holds today).
+- Residual accepted: email send is non-transactional → at-least-once on a crash between send and the (now batched, all-or-nothing) state write. Safe direction for a reminder/escalation; not exactly-once and shouldn't be (email can't be).
+
+---
+## 2026-06-11 — FLIGHTCLUB.33-WEBAPP-v2 Phase 5b Inc 3: proof-check follow-ups (MED + LOW)
+**Source:** adversarial-review of Inc 3 (operator packet UI). Fresh-Claude-agent (Codex blocked, OpenAI 401). Proof-check PASSED (no CRITICAL/HIGH).
+- **MED (partially addressed):** `/api/operator/reminders/run` is GLOBAL (all outstanding cases) but the button lives in the per-case PacketsSection. Inline fix shipped = honest relabel ("Run reminders (all cases)" + clarifying note + tooltip). DEFERRED option: add optional `?case_id=` to scope a run to one case (needs `outstanding_doc_requests(case_id=...)` filter), and/or move the control to a top-level Scheduler section once the real cron trigger lands at deploy. main.py `operator_run_reminders` + reminders.py `run_reminders`.
+- **LOW (code smell):** `backend/app/specialist_routing.py:171-173` folds case `email` into `answers["email"]`, but `email` is in NO `_SET_*_FIELDS` list, so it's never routed into a packet → no leak today. Fragility: if a future dev adds `"email"` to a field list, the leak becomes invisible. Fix when next touching that file: drop the email fold (keep only name→fullName) or rename to make "not routed" explicit. NOT fixed now — specialist_routing.py is frozen Inc-1 proof-checked code; don't churn it for a LOW.
+
+## 2026-06-11 — FC33 5b Inc3 + Inc4-shell adversarial-review findings (3× MEDIUM, no CRITICAL/HIGH)
+Reviewed: committed Inc 3 (operator packet UI, mailer.compose_packet_email PII→specialist) + UNCOMMITTED Inc 4 client shell (token-gated /api/client/{token}/... endpoints). Contract SOLID: PII egress minimised (the split) + internal-placeholder recipients + LogMailer default; operator endpoints all require_operator; client endpoints IDOR-safe (case_id scoped IN SQL), token=secrets.token_urlsafe(16) 128-bit, ZERO file bytes (route takes no body — Phase-3 gate holds), no enumeration, no status-downgrade, minimised client view. Findings:
+- **[Inc3, MED] send-packets re-blasts the specialist email on every click** (seed is idempotent, email send is not). Draft/LogMailer-safe today; in real-send mode = duplicate specialist emails. Fix: gate the send on first-dispatch (a packets_sent flag) or make "Re-send" explicit. `main.py operator_send_packets`.
+- **[Inc4-shell, MED] intake_token travels in the URL** (path/query) → leaks via server logs / referrer / history. Documented MVP (magic-link deferred). **Trigger: MUST harden before real-client go-live** — magic-link (signed, expiring) or token in header/POST body + don't-log + short TTL. Ties to the delivery/Phase-3 security gate.
+- **[Inc4-shell, MED] no rate-limiting on /api/client/{token}/...** — defense-in-depth (token is strong + IDOR-safe, so low today). **Trigger: add before client-facing go-live** (per-token request cap).
+NOTE: Inc 4 client shell is UNCOMMITTED/in-progress; the client-facing-access design decision (intake-token-as-credential) the handoff flagged "confirm first" is being made — operator to confirm intent + the go-live hardening above.
+
+---
+## 2026-06-11 — FLIGHTCLUB.33-WEBAPP-v2 Phase 5b Inc 4: client upload shell — deploy hardening (deferred)
+**Source:** adversarial-review of Inc 4 (client document upload shell). Fresh-Claude-agent (Codex 401). Proof-check PASSED, zero CRITICAL/HIGH — all 8 client-surface security properties verified (ownership/no-bytes/non-enumeration/minimization/no-token-leak/atomic/no-XSS/no-injection).
+**Deferred (ship with the magic-link delivery-phase work, NOT now):**
+- Token-in-URL tradeoff (operator-approved MVP = reuse per-case intake_token as the client credential). Upgrade = signed, EXPIRING magic-link emailed to the client (token not returned in any response). Concrete interim mitigation when /documents goes near production: set `Referrer-Policy: no-referrer` on the /documents page (or globally) so the URL token can't leak via the Referrer header to external links.
+- intake_token column is nullable but unreachable via the client surface (`_case_id_for_token` rejects empty/None before the query; create_case_from_application always generates a token). No action needed; noted for completeness.
+
+---
+## 2026-06-11 — flightclub33.com www↔apex canonical redirect (PARKED, optional)
+**Source:** session re-pointing the custom domain to flightclub33-v3-demo. Operator chose to park.
+Both `www.flightclub33.com` and apex `flightclub33.com` currently serve the Cloud Run app **independently** (both mapped to flightclub33-v3-demo). No error for visitors. Optional polish = pick ONE canonical host and 301-redirect the other. Value: (1) avoids Google "duplicate content" splitting SEO across www/non-www; (2) uniform address. **Why deferred:** minor, not a fix; on Cloud Run it's fiddly (redirect must live in app code via Host-header check or an extra layer, not a console toggle). **Trigger to revisit:** when organic-search/SEO becomes a priority for the members-club site. Wiring details in memory `reference_flightclub33_domain_mapping`.
