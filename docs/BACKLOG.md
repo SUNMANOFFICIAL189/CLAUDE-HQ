@@ -1365,3 +1365,9 @@ From /proof-check pre-merge inspection (no CRITICAL/HIGH):
 1. **MED — JWT over-redaction audit:** `eyJ…` JWT pattern over-redacts on the rare benign `eyJ`-prefixed dotted string (near-zero real rate, SAFE fail direction). Optional: log JWT redaction previews like claude-mem already does, so an accidental over-redact is auditable.
 2. **LOW — null-byte heuristic:** a file with a real secret AND a NUL byte in its first 8 KB is skipped (pre-existing; unrealistic for markdown notes).
 3. **LOW — installer mktemp guard:** `install-design-skills.sh:47` — if `mktemp` fails under `set +e`, `STAGING=""` (benign, non-destructive; near-impossible).
+
+---
+
+## [Open] — 2026-06-10 — proof-gate SEC_RX: anchor `payment` (LOW, non-blocking)
+
+From the re-/proof-check of proof-gate.sh v2 (CLEAR TO MERGE): `payments-readme.md` flags via the unanchored `payment` token in SEC_RX. Harmless over-flag (extra proof-check on a doc); anchor it like `auth`/`token`/`guard` were if it gets noisy.

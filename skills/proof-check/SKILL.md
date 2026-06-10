@@ -40,7 +40,8 @@ Trivial one-liners, doc/typo edits, pure-information answers. The inspection is 
      Do **NOT** proceed, merge, or deploy. The gate is closed.
    - **🟡 MEDIUM / 🟢 LOW → file to BACKLOG** (via the `/capture` → BACKLOG path) and report the count.
      These do not block proceeding.
-   - **Clean (no CRITICAL/HIGH) → report "proof-check passed — clear to proceed."**
+   - **Clean (no CRITICAL/HIGH) → report "proof-check passed — clear to proceed"** AND clear the
+     proof-gate flag so a proof-checked merge/push isn't blocked: `rm -f ~/.claude/.proof-needed`.
 4. **Re-running is operator-triggered.** After the operator fixes the CRITICAL/HIGH, they re-run
    `/proof-check`; the re-run (which is what catches any fix-introduced regression — exactly how MED-3
    was caught on 2026-06-10) confirms clean. No automatic re-loop.
