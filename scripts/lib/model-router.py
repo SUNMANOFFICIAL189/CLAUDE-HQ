@@ -64,8 +64,19 @@ DOCTRINE = [
 ]
 
 DEFAULT_TIER = "sonnet"
-TIER_ORDER = {"haiku": 0, "sonnet": 1, "opus": 2}
+# Fable 5 = explicit-only premium tier ABOVE Opus (Mythos-class). It is NEVER
+# auto-selected — no DOCTRINE keyword maps to it and it is never the default —
+# because after 2026-06-22 it bills as pay-as-you-go usage credits ON TOP of Max
+# (auto-routing a pay-per-use model = silent real-$ burn). It is honored ONLY when
+# a caller EXPLICITLY requests it (model: fable / claude-fable-5). See MODEL_ROUTING.md §5.5.
+TIER_ORDER = {"haiku": 0, "sonnet": 1, "opus": 2, "fable": 3}
 VALID_TIERS = set(TIER_ORDER.keys())
+# Tiers eligible for AUTOMATIC routing (env override / floor / doctrine / default).
+# Fable is EXCLUDED on purpose: it is explicit-caller-only — it may enter routing
+# ONLY via an explicit `model: claude-fable-5` on a dispatch (decide() step 4).
+# Letting HQ_MODEL_OVERRIDE/HQ_MODEL_FLOOR pick it would auto-route a pay-per-use
+# model (Fable bills usage-credits after 2026-06-22) = silent real-$ burn.
+AUTO_TIERS = {"haiku", "sonnet", "opus"}
 
 # --------------------------------------------------------------------------
 # Paths
@@ -100,6 +111,14 @@ def normalise_tier(value: str | None) -> str | None:
         return None
     v = value.strip().lower()
     return v if v in VALID_TIERS else None
+
+
+def normalise_auto_tier(value: str | None) -> str | None:
+    """For AUTO surfaces (HQ_MODEL_OVERRIDE / HQ_MODEL_FLOOR): like normalise_tier
+    but REJECTS 'fable'. Fable is never auto-routable — it enters only via an
+    explicit caller model (decide() step 4). Returns None for fable/unknown."""
+    t = normalise_tier(value)
+    return t if t in AUTO_TIERS else None
 
 
 def is_anthropic_model(model: str) -> bool:
@@ -137,6 +156,8 @@ def tier_for_model(model: str) -> str | None:
         return "sonnet"
     if "opus" in m:
         return "opus"
+    if "fable" in m:
+        return "fable"
     return None
 
 
@@ -216,7 +237,9 @@ def decide(tool_input: dict) -> tuple[str, str]:
     candidate_tier: str | None = None
     candidate_reason = ""
 
-    override = normalise_tier(os.environ.get("HQ_MODEL_OVERRIDE"))
+    override = normalise_auto_tier(os.environ.get("HQ_MODEL_OVERRIDE"))
+    if (os.environ.get("HQ_MODEL_OVERRIDE") or "").strip().lower() == "fable" and not override:
+        banner("HQ_MODEL_OVERRIDE=fable IGNORED — Fable is explicit-only; pass model:claude-fable-5 per dispatch (§5.5).")
     if override:
         candidate_tier = override
         candidate_reason = f"env-override (HQ_MODEL_OVERRIDE={override})"
@@ -237,14 +260,20 @@ def decide(tool_input: dict) -> tuple[str, str]:
             )
             candidate_tier = current_tier
 
-    # 5. Hard floor — overrides candidate (§4: refuse all downgrades)
+    # 5. Hard floor — Opus is the MINIMUM for these agent kinds (§4: refuse all
+    #    DOWNgrades). haiku/sonnet are forced UP to opus. An explicit higher tier
+    #    (Fable, via step 4) already exceeds the floor and is PRESERVED — this is
+    #    what lets the operator deliberately use Fable on a hard-floor task. Fable
+    #    is never auto-applied here; it only reaches this point if explicitly requested.
     if is_hard_floor(subagent_type):
         if TIER_ORDER[candidate_tier] < TIER_ORDER["opus"]:
             return "opus", f"hard-floor ({subagent_type}; candidate was {candidate_tier})"
-        return "opus", f"hard-floor ({subagent_type})"
+        return candidate_tier, f"hard-floor satisfied ({subagent_type} → {candidate_tier})"
 
     # 6. HQ_MODEL_FLOOR
-    floor = normalise_tier(os.environ.get("HQ_MODEL_FLOOR"))
+    floor = normalise_auto_tier(os.environ.get("HQ_MODEL_FLOOR"))
+    if (os.environ.get("HQ_MODEL_FLOOR") or "").strip().lower() == "fable" and not floor:
+        banner("HQ_MODEL_FLOOR=fable IGNORED — Fable can't be a floor (would force all traffic to a paid tier); explicit per-dispatch only (§5.5).")
     new_tier, applied = apply_floor(candidate_tier, floor)
     if applied:
         return new_tier, f"floor (HQ_MODEL_FLOOR={floor}; candidate was {candidate_tier})"

@@ -26,7 +26,7 @@ Out of scope: this doctrine does not control which *provider* is called by tools
 
 | Term | Meaning |
 |---|---|
-| **Tier** | Within-Anthropic class: Haiku → Sonnet → Opus. Cheapest first. |
+| **Tier** | Within-Anthropic class: Haiku → Sonnet → Opus → **Fable** (explicit-only, see §5.5). Cheapest first; **automatic routing never goes above Opus**. |
 | **Provider** | Anthropic, Google (Gemini), Groq, Cerebras, OpenRouter, etc. |
 | **Hard floor** | Agent kinds that refuse to route below Opus regardless of cost. |
 | **Override** | Env-var or explicit `model:` param that bypasses the doctrine. |
@@ -72,7 +72,7 @@ Agents in this list **refuse all downgrades**. Even quota-aware degradation skip
 | `security-review` (matches existing skill) | Same as red-team. |
 | `architect`, `code-architect`, anything with `architect` in the kind | Architecture decisions cascade — re-doing them after the fact is expensive. |
 
-The hook checks `subagent_type` against this list (case-insensitive substring match). If matched, model = `opus` regardless of any other rule except `HQ_ROUTER_OFF=1`.
+The hook checks `subagent_type` against this list (case-insensitive substring match). If matched, model = `opus` regardless of any other rule except `HQ_ROUTER_OFF=1`. **Opus is the MINIMUM here, not a cap:** haiku/sonnet are forced *up* to opus, but an EXPLICIT Fable request (§5.5) is preserved — it exceeds the floor.
 
 ---
 
@@ -96,7 +96,45 @@ Match by keyword/intent in the dispatch's task description (the `prompt` argumen
 | Investor comms / materials | pitch, deck, memo, investor, fundraise | **Opus** | Hard floor. |
 | Legal / compliance | legal, compliance, regulatory, license | **Opus** | Hard floor. |
 
-If multiple keywords match, the tier with the highest priority (Opus > Sonnet > Haiku) wins. **Do not "sum" matches** — a single Opus keyword forces Opus.
+If multiple keywords match, the tier with the highest priority (Opus > Sonnet > Haiku) wins. **Do not "sum" matches** — a single Opus keyword forces Opus. **No keyword maps to Fable** — it is explicit-only (§5.5).
+
+---
+
+## 5.5 Fable 5 — explicit-only premium tier (above Opus)
+
+Claude Fable 5 (`claude-fable-5`, Mythos-class) is the most capable Anthropic model — best at
+long-horizon autonomous work, strong even at medium effort, more token-efficient than prior models.
+It sits ABOVE Opus, but it is **NOT part of automatic routing** and is **never a default or a
+hard-floor**. The hook honors it ONLY when a caller explicitly passes `model: fable` /
+`claude-fable-5` (and it is preserved even on hard-floor tasks, since it exceeds the Opus minimum).
+
+**Why explicit-only — the cost reason:** on a Max plan, Haiku/Sonnet/Opus are covered by the flat
+subscription (no marginal $ within the rolling window). Fable is **free on Max only through
+2026-06-22**; **after that it bills as pay-as-you-go usage credits ON TOP of Max** (Anthropic aims to
+restore it to subscription later). Auto-routing a pay-per-use model is a silent-real-$-burn footgun
+(the 2026-04-28 quota-incident class, with literal credits) — so routing never auto-selects Fable; the
+operator/Commander chooses it deliberately.
+
+**Time-phased use policy:**
+- **Now → 2026-06-22 (free on Max):** PREFER Fable for the hardest work — long-horizon autonomous
+  builds, the hardest architecture, and any task where Opus has been demonstrably insufficient.
+  Explicitly dispatch `model: claude-fable-5` for those (free capability boost). Caveat: "free" still
+  likely draws the Max rolling window, so keep the manual `/usage` watch (§7).
+- **After 2026-06-22 (usage credits):** Opus reverts to the cost-efficient ceiling. Use Fable ONLY
+  with explicit operator approval, reserved for tasks where its long-horizon/agentic edge clearly
+  justifies real spend. Never for routine work (Haiku/Sonnet/Opus cover that free on Max).
+- **Revisit 2026-06-22**, and again if/when Anthropic restores Fable to standard subscription.
+
+Pricing reference (verify at decision time, §14): Fable $10/M in · $50/M out. Context window: not
+gated here — cost is the governing constraint, not context (operator's call).
+
+Enforcement: `model-router.py` adds `fable` to `TIER_ORDER` (above opus) but maps NO keyword to it
+and keeps it OUT of `AUTO_TIERS`; so **`HQ_MODEL_OVERRIDE=fable` and `HQ_MODEL_FLOOR=fable` are
+REJECTED** (`normalise_auto_tier`) — Fable enters ONLY via an explicit per-dispatch
+`model: claude-fable-5` (`tier_for_model` recognises it; the hard-floor returns the candidate when it
+is already ≥ opus, so an explicit Fable survives). There is **no env-var or keyword that
+auto-selects Fable**. Bare alias `fable` is emitted to `modifyToolInput` — if a Claude Code build
+doesn't accept the alias, pass the full `claude-fable-5` id (verify on first use).
 
 ---
 
@@ -301,7 +339,8 @@ The router never bypasses Trust Gate. If a provider's allowlist status changes (
 
 Update this file when:
 
-- A new tier becomes available (e.g. a new Anthropic tier between Sonnet and Opus).
+- A new tier becomes available (e.g. a new Anthropic tier between Sonnet and Opus). *(Fable 5 added 2026-06-10 as the explicit-only top tier — §5.5.)*
+- **2026-06-22 — DATED REVISIT:** Fable 5's free-on-Max promo ends and it becomes usage-credit billed. Re-confirm §5.5 holds (Fable stays explicit-only + approval-gated post-window; Opus is the default ceiling). Revisit again if Anthropic restores Fable to subscription.
 - A new provider gets added to Phase 2 chain.
 - The cost ledger reveals a doctrine row is consistently mis-routing (quality gate persistent disagreement, or human override frequency on a specific keyword).
 - A new agent kind is added to the hard floor (or removed — rare).
