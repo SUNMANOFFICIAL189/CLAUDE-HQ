@@ -1333,3 +1333,13 @@ Verified: pre-filter StarMaster 6-gate failed 2/6 gates (Z=+0.46σ, worst=-$1,49
 Closes the visibility gap exposed by the "blocked=25" STATUS counter that had no per-rejection detail. Read with `tail -50 .../signal-log.jsonl | jq .`. Fire-and-forget; diagnostic channel never breaks trading path.
 
 Scope: geopolitics pipeline only (Phase 1). Signal pipeline visibility deferred. File will be created on first geopolitics signal attempt post-deploy.
+
+---
+
+## [Parked] — 2026-06-10 — Refresh expired Codex API key (cross-vendor review + /codex:rescue)
+
+**What:** The Codex CLI key is invalid (HTTP 401, `sk-proj-…xh0A`). While dead, the cross-vendor lens in `/adversarial-review` and the `/codex:rescue` delegation path are non-functional (intra-vendor reviews only).
+
+**Action when unparked:** refresh the OpenAI API key (operator task — key paste/login), then verify `codex exec -s read-only "ping"` returns a result.
+
+**Parked by operator 2026-06-10** ("I won't be doing this yet"). No urgency; surfaced during the harness-audit adversarial-review (project_ecc_harness_eval_2026_06_10).
