@@ -1343,3 +1343,25 @@ Scope: geopolitics pipeline only (Phase 1). Signal pipeline visibility deferred.
 **Action when unparked:** refresh the OpenAI API key (operator task — key paste/login), then verify `codex exec -s read-only "ping"` returns a result.
 
 **Parked by operator 2026-06-10** ("I won't be doing this yet"). No urgency; surfaced during the harness-audit adversarial-review (project_ecc_harness_eval_2026_06_10).
+
+---
+
+## [Open] — 2026-06-10 — Secret-scrubber v2: deferred non-critical hardening
+
+Scrubber `scripts/lib/secret-scrub-incremental.py` is v2.1 (all CRITICALs C1-C5 + new MED-3 fail-open fixed; Stripe/JWT added; blind-reviewed). Deferred fast-follows (none merge-blocking, none a leak risk today):
+
+1. **HIGH-1 (deep): AWS *secret* access key heuristic** — 40-char base64 with no prefix; add a proximity-bounded pattern (near `aws`/`secret` keyword) to limit false positives. Only matters if AWS secret keys are ever pasted into notes.
+2. **HIGH-2: scan-time vs SessionEnd budget** — `scrub_vault` scans the full diff-vs-origin set (~6003 files now, inflated by the halted-backup backlog). Fails CLOSED (silent no-push) if killed. Mitigations: scan the actual `git add -A` push-diff, raise the hook timeout, commit-aggressively, or add a loud slow-scan warning. Re-measure AFTER the vault clears its unpushed backlog — likely self-mitigates.
+3. **MED-2: `*.db`/`*.sqlite`-in-vault guard** — push-safety currently relies on "no DB tracked in vault." Add an assert that refuses the push if a DB appears in the push set.
+4. **LOW-2: mask the mempalace 80-char secret preview** in `.secret-scrub.log` (already gitignored+untracked, so local-hygiene only).
+
+**Source:** 2026-06-10 blind /adversarial-review of scrubber v2 (project_ecc_harness_eval_2026_06_10).
+
+---
+
+## [Open] — 2026-06-10 — Scrubber v2.1 proof-check LOW/MED (non-blocking, cleared to merge)
+
+From /proof-check pre-merge inspection (no CRITICAL/HIGH):
+1. **MED — JWT over-redaction audit:** `eyJ…` JWT pattern over-redacts on the rare benign `eyJ`-prefixed dotted string (near-zero real rate, SAFE fail direction). Optional: log JWT redaction previews like claude-mem already does, so an accidental over-redact is auditable.
+2. **LOW — null-byte heuristic:** a file with a real secret AND a NUL byte in its first 8 KB is skipped (pre-existing; unrealistic for markdown notes).
+3. **LOW — installer mktemp guard:** `install-design-skills.sh:47` — if `mktemp` fails under `set +e`, `STAGING=""` (benign, non-destructive; near-impossible).

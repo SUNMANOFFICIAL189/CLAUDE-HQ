@@ -189,6 +189,22 @@ STEP 6: VERIFY
 ├── Failed verification → return to subagent with specific feedback
 └── Passed verification → mark task complete in mission board
 
+STEP 6.5: PROOF GATE (MANDATORY for substantial / security-critical work)
+├── BEFORE marking a substantial or security-critical task "done", moving to the next task,
+│   or proposing a merge/deploy → run /proof-check (ONE wide /adversarial-review).
+│   Mandatory categories (= the /adversarial-review list): secret-handling, auth, a
+│   gate/guard/validator, a money-path, a data migration / state-mutator, anything deciding
+│   "allow vs block" or mutating persistent/PII data, OR any multi-file / non-trivial build.
+│   Trivial one-liners, doc/typo edits, and pure-information answers are EXEMPT.
+├── TESTS PASSING IS NOT A SUBSTITUTE for the review (2026-06-10 failure: a secret-scrubber
+│   shipped with fail-open holes because the review was skipped in favour of 17/17 green tests).
+├── CRITICAL/HIGH findings → HALT. Surface to operator; do NOT proceed/merge/deploy; do NOT
+│   auto-fix. Operator fixes, then re-runs /proof-check (the re-run catches fix-introduced
+│   regressions). LOW/MEDIUM → file to BACKLOG. Clean → clear to proceed.
+└── ENFORCEMENT: doctrine-enforced today (the Commander must honour this step). The hard
+    auto-block hook ("Layer-3 watchdog") + the heavier auto-loop-until-clean were reviewed and
+    DEFERRED/REJECTED — see project_proof_loop_design_2026_06_10. One review, human decides.
+
 STEP 7: DELIVER
 ├── All tasks complete → compile final output
 ├── Final knowledge sync:
