@@ -1417,3 +1417,51 @@ NOTE: Inc 4 client shell is UNCOMMITTED/in-progress; the client-facing-access de
 ## 2026-06-11 — flightclub33.com www↔apex canonical redirect (PARKED, optional)
 **Source:** session re-pointing the custom domain to flightclub33-v3-demo. Operator chose to park.
 Both `www.flightclub33.com` and apex `flightclub33.com` currently serve the Cloud Run app **independently** (both mapped to flightclub33-v3-demo). No error for visitors. Optional polish = pick ONE canonical host and 301-redirect the other. Value: (1) avoids Google "duplicate content" splitting SEO across www/non-www; (2) uniform address. **Why deferred:** minor, not a fix; on Cloud Run it's fiddly (redirect must live in app code via Host-header check or an extra layer, not a console toggle). **Trigger to revisit:** when organic-search/SEO becomes a priority for the members-club site. Wiring details in memory `reference_flightclub33_domain_mapping`.
+
+---
+
+## [Open] — 2026-06-14 — model-router.py: tier_for_model() docstring omits 'fable'
+
+**What:** `scripts/lib/model-router.py` — `tier_for_model()` docstring says "Extract tier (haiku/sonnet/opus)…" but the function also returns `"fable"`. Update the docstring to list fable.
+
+**Why:** Cosmetic accuracy. Surfaced by the 2026-06-14 Fable-disable adversarial review (LOW-2). Pre-existing since the 2026-06-10 Fable addition — NOT introduced by the disable change, so left out of that focused edit to avoid scope creep.
+
+**Estimate:** 2 minutes.
+
+**How to start:** Edit the one-line docstring; no behaviour change.
+
+**Acceptance:** Docstring matches the function's actual return set.
+
+---
+
+## [Open] — 2026-06-14 — Codex OpenAI API key invalid (401) — cross-vendor review lens down
+
+**What:** The Codex CLI reports "logged in via API key" but a real `codex exec` call fails with `401 Unauthorized — Incorrect API key provided` (key fragment redacted) against `https://api.openai.com/v1/responses`. The cross-vendor (Codex) lens of `/adversarial-review` is therefore currently UNAVAILABLE — reviews fall back to fresh-Claude-agent only (intra-vendor).
+
+**Why:** Cross-vendor independence is the gold standard for the proof gate (different model than the one that wrote the code). A dead key silently degrades every adversarial review to single-vendor. Per LESSON 14 spirit, a 401 can also mean a revoked/leaked key — worth checking, not ignoring.
+
+**Estimate:** 10–20 minutes.
+
+**How to start:**
+1. Confirm the stored key: `codex login status` vs the key OpenAI actually expects (platform.openai.com/account/api-keys). Check for API billing enabled (ChatGPT Plus ≠ API access).
+2. Refresh the key into wherever Codex reads it (per LESSONS 14–15, prefer Keychain + launcher, never plaintext).
+3. Re-verify: `codex exec -s read-only -C ~/claude-hq "echo ok"` returns a real response.
+
+**Acceptance:** `codex exec` completes a read-only review without a 401; adversarial-review cross-vendor lens restored.
+
+---
+
+## [Open] — 2026-06-14 — proof-gate SEC_RX `vault` token false-positives on every vault save
+
+**What:** `scripts/proof-gate.sh` SEC_RX (line 34) includes the bare token `vault`. Because the Obsidian vault lives under `~/Vaults/…`, the PostToolUse hook flags EVERY edit to any vault file (Decision Log, Hub, etc.) as "security-critical," which then BLOCKS the next `git push`/`merge` until `/proof-check` re-runs or `PROOF_OK=1` is set in the hook env. Net effect: a routine Decision Log save (e.g. during `/save`) blocks the code push even when the actual code was already proof-checked.
+
+**Why:** Recurring friction + a "boy who cried wolf" risk — operators learn to reflex-clear the gate, eroding the gate's value for genuine security-critical changes. The intent of `vault` was presumably a secrets-vault path/file, not the Obsidian knowledge vault. (This is likely the "SEC_RX improvement noted" from the 2026-06-13 session.)
+
+**Estimate:** 20–30 min (change + the change itself needs a `/proof-check`, since proof-gate.sh is on its own SEC_RX list).
+
+**How to start:**
+1. Anchor the token like the auth/token/guard ones already are, e.g. `(^|[/._-])vault([/._-]|$)` AND/OR exclude the known Obsidian vault root (`~/Vaults/`) from the PostToolUse path match.
+2. Confirm a Decision Log edit no longer populates `~/.claude/.proof-needed`, while a real secrets-vault path still does.
+3. `/proof-check` the proof-gate.sh change (it gates itself), then commit.
+
+**Acceptance:** Editing a file under `~/Vaults/` does not flag the proof-gate; editing `secret`/`.env`/`model-router`/etc. still does. A `/save` no longer needs a `PROOF_OK`/flag-clear just for the Decision Log.

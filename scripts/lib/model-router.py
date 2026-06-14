@@ -64,19 +64,38 @@ DOCTRINE = [
 ]
 
 DEFAULT_TIER = "sonnet"
-# Fable 5 = explicit-only premium tier ABOVE Opus (Mythos-class). It is NEVER
-# auto-selected — no DOCTRINE keyword maps to it and it is never the default —
-# because after 2026-06-22 it bills as pay-as-you-go usage credits ON TOP of Max
-# (auto-routing a pay-per-use model = silent real-$ burn). It is honored ONLY when
-# a caller EXPLICITLY requests it (model: fable / claude-fable-5). See MODEL_ROUTING.md §5.5.
+
+# --- Top-tier placeholder switch (FABLE_ENABLED) ---------------------------
+# Fable 5 (Mythos-class) was the explicit-only premium tier ABOVE Opus. Anthropic
+# DISABLED Fable on 2026-06-14, so its slot is now a RESERVED PLACEHOLDER: kept in
+# TIER_ORDER below so a future above-Opus model can slot straight in, but switched
+# OFF today. While OFF, any explicit `model: fable`/`claude-fable-5` request is
+# clamped DOWN to the active ceiling (Opus) instead of being honored — emitting a
+# disabled model would otherwise fail the dispatch (see clamp_disabled_tier).
+#
+# Fable was ALSO always excluded from AUTOMATIC routing (no DOCTRINE keyword maps to
+# it; HQ_MODEL_OVERRIDE/HQ_MODEL_FLOOR reject it). That stays true whether on or off:
+# a top tier is never auto-selected (it would bill real $ once off the free promo).
+#
+# TO RE-ENABLE when a new top-tier model ships: set FABLE_ENABLED = True. If the new
+# model has a different name, also update tier_for_model() + the emitted model id /
+# bare alias. See MODEL_ROUTING.md §5.5.
+FABLE_ENABLED = False
+DISABLED_TIER_FALLBACK = "opus"  # active ceiling a disabled top tier falls back to
+
 TIER_ORDER = {"haiku": 0, "sonnet": 1, "opus": 2, "fable": 3}
 VALID_TIERS = set(TIER_ORDER.keys())
 # Tiers eligible for AUTOMATIC routing (env override / floor / doctrine / default).
-# Fable is EXCLUDED on purpose: it is explicit-caller-only — it may enter routing
-# ONLY via an explicit `model: claude-fable-5` on a dispatch (decide() step 4).
-# Letting HQ_MODEL_OVERRIDE/HQ_MODEL_FLOOR pick it would auto-route a pay-per-use
-# model (Fable bills usage-credits after 2026-06-22) = silent real-$ burn.
+# Fable is EXCLUDED on purpose: it is explicit-caller-only — when enabled it may enter
+# routing ONLY via an explicit `model: claude-fable-5` on a dispatch (decide() step 4).
 AUTO_TIERS = {"haiku", "sonnet", "opus"}
+
+# Banner hints — adapt to the on/off state so we never give stale advice.
+FABLE_EXPLICIT_HINT = "Fable is explicit-only; pass model:claude-fable-5 per dispatch (§5.5)."
+FABLE_DISABLED_HINT = (
+    "Fable is parked (disabled 2026-06-14) — Opus is the current ceiling; "
+    "the slot is reserved for a future above-Opus model (§5.5)."
+)
 
 # --------------------------------------------------------------------------
 # Paths
@@ -119,6 +138,24 @@ def normalise_auto_tier(value: str | None) -> str | None:
     explicit caller model (decide() step 4). Returns None for fable/unknown."""
     t = normalise_tier(value)
     return t if t in AUTO_TIERS else None
+
+
+def fable_hint() -> str:
+    """Banner advice that tracks the on/off state — never tells a user to pass a
+    model id that is currently disabled."""
+    return FABLE_EXPLICIT_HINT if FABLE_ENABLED else FABLE_DISABLED_HINT
+
+
+def clamp_disabled_tier(tier: str, reason: str) -> tuple[str, str]:
+    """Clamp a disabled top-tier placeholder DOWN to the active ceiling.
+
+    Matches the bare tier 'fable' ONLY. Router-off and non-Anthropic passthrough
+    return a raw model string (not a tier), so they are intentionally left
+    untouched — turning routing off means the operator's literal choice stands.
+    No-op once FABLE_ENABLED is True (or for any other tier)."""
+    if tier == "fable" and not FABLE_ENABLED:
+        return DISABLED_TIER_FALLBACK, f"fable-disabled-placeholder → {DISABLED_TIER_FALLBACK}"
+    return tier, reason
 
 
 def is_anthropic_model(model: str) -> bool:
@@ -239,7 +276,7 @@ def decide(tool_input: dict) -> tuple[str, str]:
 
     override = normalise_auto_tier(os.environ.get("HQ_MODEL_OVERRIDE"))
     if (os.environ.get("HQ_MODEL_OVERRIDE") or "").strip().lower() == "fable" and not override:
-        banner("HQ_MODEL_OVERRIDE=fable IGNORED — Fable is explicit-only; pass model:claude-fable-5 per dispatch (§5.5).")
+        banner(f"HQ_MODEL_OVERRIDE=fable IGNORED — {fable_hint()}")
     if override:
         candidate_tier = override
         candidate_reason = f"env-override (HQ_MODEL_OVERRIDE={override})"
@@ -262,9 +299,10 @@ def decide(tool_input: dict) -> tuple[str, str]:
 
     # 5. Hard floor — Opus is the MINIMUM for these agent kinds (§4: refuse all
     #    DOWNgrades). haiku/sonnet are forced UP to opus. An explicit higher tier
-    #    (Fable, via step 4) already exceeds the floor and is PRESERVED — this is
-    #    what lets the operator deliberately use Fable on a hard-floor task. Fable
-    #    is never auto-applied here; it only reaches this point if explicitly requested.
+    #    (Fable, via step 4) exceeds the floor, so decide() returns it here — BUT
+    #    while FABLE_ENABLED=False, clamp_disabled_tier() in main() bumps that fable
+    #    result DOWN to Opus before emission (Fable is disabled; see §5.5). Fable is
+    #    never auto-applied here; it only reaches this point if explicitly requested.
     if is_hard_floor(subagent_type):
         if TIER_ORDER[candidate_tier] < TIER_ORDER["opus"]:
             return "opus", f"hard-floor ({subagent_type}; candidate was {candidate_tier})"
@@ -273,7 +311,7 @@ def decide(tool_input: dict) -> tuple[str, str]:
     # 6. HQ_MODEL_FLOOR
     floor = normalise_auto_tier(os.environ.get("HQ_MODEL_FLOOR"))
     if (os.environ.get("HQ_MODEL_FLOOR") or "").strip().lower() == "fable" and not floor:
-        banner("HQ_MODEL_FLOOR=fable IGNORED — Fable can't be a floor (would force all traffic to a paid tier); explicit per-dispatch only (§5.5).")
+        banner(f"HQ_MODEL_FLOOR=fable IGNORED — {fable_hint()}")
     new_tier, applied = apply_floor(candidate_tier, floor)
     if applied:
         return new_tier, f"floor (HQ_MODEL_FLOOR={floor}; candidate was {candidate_tier})"
@@ -371,6 +409,8 @@ def main() -> int:
     project = Path(cwd).name
 
     chosen_tier, reason = decide(tool_input)
+    # Disabled top-tier placeholder (Fable, while FABLE_ENABLED=False) → clamp to Opus.
+    chosen_tier, reason = clamp_disabled_tier(chosen_tier, reason)
     requested = tool_input.get("model")
     subagent_kind = tool_input.get("subagent_type") or "general-purpose"
     prompt_text = (tool_input.get("prompt") or "").strip().replace("\n", " ")
