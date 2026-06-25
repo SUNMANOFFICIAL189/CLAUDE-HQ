@@ -1465,3 +1465,20 @@ Both `www.flightclub33.com` and apex `flightclub33.com` currently serve the Clou
 3. `/proof-check` the proof-gate.sh change (it gates itself), then commit.
 
 **Acceptance:** Editing a file under `~/Vaults/` does not flag the proof-gate; editing `secret`/`.env`/`model-router`/etc. still does. A `/save` no longer needs a `PROOF_OK`/flag-clear just for the Decision Log.
+
+---
+
+## [Open] — 2026-06-25 — insta-notion-sync: bound the AITransient retry path
+
+**What:** In `~/projects/insta-notion-sync`, transient AI-tagging failures (`AITransient`, incl. the new unparseable-JSON case) are handled by `reset_to_unprocessed()` (processor.py `_process_one`, via the `AIQuotaExceeded` alias) which has NO retry counter — unlike `retry_old_failures` which caps `failed` rows at `[retry 3]`. A row that *persistently* looks transient (e.g. `claude -p` returns unparseable JSON for it every single time, or the CLI is down for hours) is reset to `unprocessed` and re-attempted every cycle indefinitely.
+
+**Why:** Low impact (no data loss, doesn't block other rows — they still process after it within the 25/cycle loop), but it wastes ~30–60s/cycle on a pathological row forever. Surfaced by the 2026-06-25 proof-check adversarial review (the one MEDIUM that stood after the video-leak finding was fixed same-session). The strengthened tagging prompt made unparseable-JSON rare (3/3 clean in testing), so this is tail-risk hardening, not urgent.
+
+**Estimate:** 30–45 min (needs care: `reset_to_unprocessed` is shared with the quota path where unbounded retry is INTENTIONAL — must distinguish "wait for quota/throttle to clear" from "this row never parses").
+
+**How to start:**
+1. Add a bounded-transient counter (mirror the `[retry N]` pattern in the Error field) for the unparseable-JSON / non-quota transient cases; after N (e.g. 5) → `mark_failed` so `retry_old_failures` then governs it.
+2. Keep quota/rate-limit transients unbounded (correct — they clear on their own).
+3. Verify a row that always fails to parse eventually lands in `failed`, while a quota'd row still retries until quota resets.
+
+**Acceptance:** A deterministically-unparseable row stops being re-attempted after a bounded number of cycles; a genuinely-transient (quota/throttle) row still recovers without a cap.
