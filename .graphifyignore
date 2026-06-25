@@ -1,0 +1,23 @@
+# graphify exclude list — keeps the knowledge graph to HQ's OWN authored knowledge.
+# gitignore-style semantics (graphify detect.py reads this natively).
+# Added 2026-06-25 (Phase 1 graphify cleanup) — see docs/BACKLOG.md graphify item.
+
+# Cloned reference repos — not our source
+repos/
+
+# Vendored tool collections (agent-skills-mega, graphify, humanizer, etc.) — not HQ-authored
+tools/
+
+# graphify's own output — never index generated artifacts (incl. the pre-clean backup)
+graphify-out/
+graphify-out.pre-clean-2026-06-25/
+
+# Run-state (caches, ledgers, locks)
+run/
+
+# Standard noise
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store

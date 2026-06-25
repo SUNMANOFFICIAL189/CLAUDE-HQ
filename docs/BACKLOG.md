@@ -501,7 +501,7 @@
 
 ---
 
-## [Open] — 2026-05-08 — graphify clean regen with `repos/` excluded
+## [Done] — 2026-05-08 (resolved 2026-06-25) — graphify clean regen with `repos/` excluded
 
 **What:** The vault's `Projects/claude-hq/Graph/` was last regenerated 2026-04-21. As of today, `graphify --update` detects 2,158 changed files — but **2,079 of those are inside `~/claude-hq/repos/`** (cloned reference repos that have accumulated since April, not our source). A naive full re-extraction would burn ~60 subagents and 30+ minutes processing material that isn't ours and shouldn't be in our knowledge graph.
 
@@ -518,6 +518,8 @@
 **Acceptance:** A `graphify --update` invocation that produces a fresh graph covering only HQ source (commander, watchdogs, scripts, patches, docs, agents, tools) without re-extracting `repos/`. Total file count after exclude should be <120, not 2,158.
 
 **Connection:** Hub.md and Decision Log narrative already cover the 2026-05-08 work for human readers — graphify is a nice-to-have visualisation, not blocking. Scheduled regen rather than session-end snapshot per Lesson 20 (don't ship un-instrumented work).
+
+**Resolution (2026-06-25):** Done via the NATIVE `.graphifyignore` (the wrapper plan in "How to start" #2 was obsolete — graphify gained `.graphifyignore` support, verified in `detect.py:256-378`). Created `~/claude-hq/.graphifyignore` excluding `repos/ tools/ graphify-out/ run/` + noise. Adversarial review caught two faults in the original plan before running: (a) `repos/` alone was insufficient — `tools/` (vendored collections, 2,040 files) also polluted; (b) an incremental `--update` would NOT purge existing junk nodes, so a FULL rebuild was required (old `graphify-out` moved to `graphify-out.pre-clean-2026-06-25`). Result: **621 nodes / 26 communities** (was 6,521 nodes, ~78% cloned code); vault `Graph/` **649 files** (was 7,099); 0 `repos//tools/` source-file nodes. Cost: ~342k tokens / 3 semantic worker agents (AMBER, operator-approved; estimate had been GREEN ≤120k — per-agent cost for HQ markdown is ~115k, not the 40k default — calibration logged). Detect classified the real corpus at 74 source files (acceptance "<120" met). STILL OPEN as follow-ups: (1) session-end hook Layer 6 fails silently (`except: pass`); (2) no scheduled refresh yet — both surfaced to operator 2026-06-25.
 
 ---
 
