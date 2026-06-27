@@ -1484,3 +1484,20 @@ Both `www.flightclub33.com` and apex `flightclub33.com` currently serve the Clou
 3. Verify a row that always fails to parse eventually lands in `failed`, while a quota'd row still retries until quota resets.
 
 **Acceptance:** A deterministically-unparseable row stops being re-attempted after a bounded number of cycles; a genuinely-transient (quota/throttle) row still recovers without a cap.
+
+---
+
+## [Open] — 2026-06-25 — session-end.sh Layer 6: Path string-interpolation breaks on quoted repo paths
+
+**What:** The graphify re-export block in `~/.claude/hooks/session-end.sh` (Layer 6) builds its Python `-c` program by shell-interpolating `'$PROJECT_DIR'` / `'$OBSIDIAN_VAULT'` / `'$PROJECT_NAME'` into single-quoted Python string literals. A single quote in any of those paths produces a Python SyntaxError at compile time — which the 2026-06-25 logging fix (follow-up #1) cannot catch (the try/except runs after compile), so the re-export silently fails for that edge case, defeating the fix's purpose.
+
+**Why:** Surfaced by `/proof-check` (adversarial review) 2026-06-25 as the lone MEDIUM on the graphify work. Pre-existing pattern across the whole Layer 6 + 6.5 blocks — NOT introduced by the 2026-06-25 edit. Near-zero real risk today (operator path `/Users/sunil_rajput/claude-hq` has no quotes), but a latent silent-failure trap worth tidying next time the hook is touched.
+
+**Estimate:** 20-30 min.
+
+**How to start:**
+1. In session-end.sh Layer 6, pass PROJECT_DIR/OBSIDIAN_VAULT/PROJECT_NAME to the Python via the environment, read with `os.environ[...]` inside the `-c` program.
+2. Replace each `'$VAR/...'` literal with `Path(os.environ['VAR']) / '...'`.
+3. Test with a temp repo path containing a single quote.
+
+**Acceptance:** A repo whose path contains a single quote re-exports without a Python syntax error, and any genuine failure is recorded in `graphify-out/graphify-export-errors.log`.
