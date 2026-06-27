@@ -1501,3 +1501,22 @@ Both `www.flightclub33.com` and apex `flightclub33.com` currently serve the Clou
 3. Test with a temp repo path containing a single quote.
 
 **Acceptance:** A repo whose path contains a single quote re-exports without a Python syntax error, and any genuine failure is recorded in `graphify-out/graphify-export-errors.log`.
+
+---
+
+## [Open] — 2026-06-27 — Build the transcript watchdog: catch recommendations surfaced without ctdd-precheck (the "won't-fire" enforcer)
+
+**What:** An after-the-fact transcript scanner (Stop hook or periodic sweep over `~/.claude/projects/*/` transcripts) that flags any case where a recommendation was surfaced to the operator WITHOUT a preceding `CTDD-PRECHECK[...]` verdict block (and, now that Step 0 exists, without the Step-0 grounding artifacts). This is the "Layer 3" enforcement referenced in LESSON 27.10 and is the ONLY mechanism that guarantees the grounding + recommendation discipline fires even when I forget to invoke the gate. Doctrine (Lesson 28) + the hardened Step-0 gate (shipped 2026-06-27) reduce the skip rate; only this watchdog catches the *skip itself*.
+
+**Why:** 2026-06-26 — an 8-agent ~500k-token analysis re-derived an already-PLANNED fix because grounding was skipped/shallow (see Lesson 28). ctdd-precheck is mandatory but SELF-invoked; both the 2026-05-28 and 2026-06-26 incidents happened WITH the mandatory gate nominally in place, because a self-invoked gate depends on the assistant remembering and not self-certifying shallow artifacts. A separate "groundwork" skill was designed, adversarially reviewed, and REJECTED 2026-06-27 (would rot like the `/rpi-*` commands; renames rather than prevents the fake-compliance failure). The fresh-agent review's verdict: the only real fix for "won't fire" is this transcript watchdog. **Deferred (not built now) per operator decision 2026-06-27 (option b: ship the rule + hardened gate now, watchdog as its own reviewed build)** — because the detection is genuinely hard (a "recommendation" is free assistant text with NO clean PreToolUse signal) and a rushed fail-open watchdog becomes the exact FALSE-ASSURANCE trap the proof-gate.sh holes already demonstrated.
+
+**Estimate:** ~half-day build + MANDATORY adversarial-review / proof-check before it is trusted + a short tuning soak (the free-text "is this a recommendation?" detector will need iteration to avoid both false flags and misses). Do NOT ship it fail-open.
+
+**How to start:**
+1. Detection surface: there is NO PreToolUse signal for "about to surface a recommendation" (it's assistant text), so this is an AFTER-THE-FACT transcript scan (Stop hook or periodic scanner), NOT a blocking PreToolUse hook.
+2. Heuristic v1: detect recommendation-shaped assistant turns ("I recommend", "we should", option menus, change/ship/close/expand verbs) NOT preceded in the same turn-window by a `CTDD-PRECHECK[...]` block. Start permissive; measure false-positive rate before alerting.
+3. Plain-English alert via existing `watchdog/telegram.py` PlainAlert (Lesson 16); an undetectable case is LOGGED for review, never silently passed as clean.
+4. Adversarial-review the watchdog against the proof-gate.sh fail-open lessons BEFORE trusting it.
+5. Track its own adoption signal (Lesson 20): does it catch real skips without crying wolf?
+
+**Acceptance:** A deliberately-planted "recommendation without a preceding ctdd-precheck verdict" in a test transcript is flagged; a properly-gated recommendation is NOT flagged; the false-positive rate is low enough to act on; it has passed an adversarial-review for fail-open holes. Cross-ref: LESSON 27.10, LESSON 28, ctdd-precheck Step 0.

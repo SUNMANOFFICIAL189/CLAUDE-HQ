@@ -167,6 +167,20 @@
   don't; the source is already markdown and Obsidian-native. Write a
   wikilink from the Hub pointing at the source.
 
+### 13. `.gitignore` patterns with `/` are anchored to the gitignore's location
+- **Rule:** In a multi-level repo (where the `.gitignore` sits above
+  the actual content dir), patterns like `.obsidian/workspace.json`
+  will NOT match `<subdir>/.obsidian/workspace.json`. Use `**/` prefix:
+  `**/.obsidian/workspace.json`.
+- **Why:** 2026-04-21 — created `jarvis-brain` repo with `.gitignore`
+  at `~/Vaults/Jarvis-Brain/` and vault content at
+  `~/Vaults/Jarvis-Brain/JARVIS-BRAIN/`. Initial commit accidentally
+  tracked `JARVIS-BRAIN/.obsidian/workspace.json` because the pattern
+  without `**/` was interpreted relative to the repo root only.
+- **How to apply:** If your repo root is one level above the actual
+  content, prefix subdirectory-anchored patterns with `**/`. Test:
+  `git check-ignore -v <file>` should report the matching pattern.
+
 ### 14. Plaintext-secret config files are landmines — read them only via redirected tools
 - **Rule:** If a file is known to contain plaintext secrets (`claude_desktop_config.json`,
   `.env`, credentials registries), never surface its contents directly through the `Read`
@@ -198,20 +212,6 @@
   entries are encrypted at rest and require your login. Launchers keep the spawn
   command short and the config clean.
 - **How to apply:** New MCP with a secret → (1) `security add-generic-password -U -a "$USER" -s "claude-mcp-<name>" -w <value>`; (2) copy an existing launcher from `~/claude-hq/scripts/mcp-launchers/`, adapt the service name and exec line; (3) update `claude_desktop_config.json` to point to the launcher with `env: {}`; (4) restart Claude Desktop.
-
-### 13. `.gitignore` patterns with `/` are anchored to the gitignore's location
-- **Rule:** In a multi-level repo (where the `.gitignore` sits above
-  the actual content dir), patterns like `.obsidian/workspace.json`
-  will NOT match `<subdir>/.obsidian/workspace.json`. Use `**/` prefix:
-  `**/.obsidian/workspace.json`.
-- **Why:** 2026-04-21 — created `jarvis-brain` repo with `.gitignore`
-  at `~/Vaults/Jarvis-Brain/` and vault content at
-  `~/Vaults/Jarvis-Brain/JARVIS-BRAIN/`. Initial commit accidentally
-  tracked `JARVIS-BRAIN/.obsidian/workspace.json` because the pattern
-  without `**/` was interpreted relative to the repo root only.
-- **How to apply:** If your repo root is one level above the actual
-  content, prefix subdirectory-anchored patterns with `**/`. Test:
-  `git check-ignore -v <file>` should report the matching pattern.
 
 ### 16. All user-facing alerts must be in plain English — no jargon, ever
 - **Rule:** Any system built under the HQ umbrella that sends messages to
@@ -889,3 +889,13 @@
   9. **Anti-pattern B:** Using the skill as documentation of an already-made decision ("here's why D is the right call, validated by ctdd-precheck") — the skill is upstream of the decision, not downstream documentation.
 
   10. **Adoption signal (per Lesson 20):** measure `recommendations_made_without_skill_invocation` over the next 14 days. Default action if signal > 0 after 14 days: build the watchdog rule that catches violations in transcripts (deferred Layer 3). Default action if signal = 0: skill has hardened into discipline; no further enforcement needed.
+
+### 28. Ground every change-recommendation in the as-built reality BEFORE surfacing it — open the file, not the index
+
+- **Rule:** Before surfacing ANY recommendation to change / add / remove / fix / re-enable / build on an EXISTING system, complete the `ctdd-precheck` **Step 0 grounding gate**: (a) re-retrieve context if the question has PIVOTED since context was loaded; (b) read the AS-BUILT source/config of the thing you'd change and quote its current value verbatim; (c) topic-grep the FULL Decision Log + BACKLOG + LESSONS by SUBJECT (enumerate synonyms first), pasting raw hits; (d) OPEN the relevant memory FILE and quote its body verbatim — the MEMORY.md index one-liner is a pointer, NOT the knowledge. Then answer: already built? already decided-against? planned-but-unshipped (why did it stall)? contradicts a logged decision? If any, surface THAT — not the original recommendation — and fix the stale source this session (Lesson 26).
+- **Why:** 2026-06-26 — an 8-agent, ~500k-token loss analysis on PATS "discovered" that the fix was to raise `MIN_SELL_ENTRY_PRICE` — but that exact change (`bump 0.05→0.90`) had been diagnosed and PLANNED on 2026-05-12 and was sitting in (a) the auto-loaded MEMORY.md index, (b) a 2-line memory file, (c) the Decision Log (lines 1850/1868). I even CITED "the 05-12 Strategy C call" by name in the synthesis — then proceeded as if I'd discovered it fresh. I also proposed re-adding a geopolitics category filter that had been DELIBERATELY removed 2026-05-17. The operator had explicitly asked me to "understand the full historical context before recommending" — the knowledge was available; I under-retrieved. Root causes: (1) cited the index one-liner as if it were the file's content; (2) gathered context for the PRIOR question's lens (data-integrity) and didn't re-retrieve when the question pivoted to "improve the strategy"; (3) analyzed OUTCOMES (trade data) without reading the CONTROLS (the executor code); (4) recommended-then-grounded instead of ground-then-recommend. The grounding-at-plan-draft-time safety net caught it before any code shipped — but in a less careful session it would have recurred, which is exactly the operator's stated fear about fresh context windows.
+- **How to apply:**
+  1. The discipline lives as `ctdd-precheck` **Step 0** (added 2026-06-27) — it runs before every class verdict, so it inherits ctdd-precheck's mandatory-before-every-recommendation firing. Per Lesson 19, the durable home for a behaviour is doctrine + the existing gate, NOT a new standalone skill: a separate "groundwork" skill was designed, adversarially reviewed, and REJECTED 2026-06-27 (it would have rotted like the `/rpi-*` commands and merely renamed the fake-compliance failure).
+  2. The artifact must be the THING: a verbatim current-value quote, a grep command with enumerated synonyms + raw hits, the memory FILE body — not a paraphrase or an index line. Shallow artifacts are the gaming surface; verbatim requirements defeat "cite without reading" by construction.
+  3. Multi-agent analysis of an existing system: ONE shared grounding pass by the orchestrator, feed agents the current controls + "net-new vs existing only" — don't let N agents re-derive and re-propose what's already built.
+  4. **The only mechanism that GUARANTEES it fires even when skipped is the transcript watchdog** (BACKLOG 2026-06-27, cross-ref Lesson 27.10) — doctrine + the hardened gate reduce the skip rate; only an after-the-fact transcript scan catches the skip itself. Until that ships, this rule + Step 0 are the enforcement and they depend on me actually invoking ctdd-precheck.
