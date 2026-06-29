@@ -29,9 +29,12 @@ INPUT="$(cat)"; export INPUT
 PUSH_RX='git[[:space:]].*push|git[[:space:]].*merge([[:space:]]|$)|gh[[:space:]].*pr[[:space:]].*merge|git[[:space:]].*branch[[:space:]].*-f.*(main|master)'
 
 # Security-critical file paths whose edit requires a proof-check before any push.
-# Anchored auth/token/guard to avoid AUTHORS.md / TokenList-style false positives;
-# added money-path / migration / login / ssh-key categories (were missed in v1).
-SEC_RX='secret|scrub|credential|password|passwd|\.env|vault|trust-gate|proof-gate|proof-check|model-router|session-end|session-start|settings\.json|/hooks/|risk-manager|position-lifecycle|wallet|api[_-]?key|\.pem$|\.key$|id_rsa|/migrations?/|[/._-]migration|payment|charge|billing|/login|(^|/|[._-])auth([./_-]|$)|(^|[/._-])token([/._-]|$)|(^|[/._-])guard([/._-]|$)|\.sql$'
+# Anchored auth/token/guard/vault to avoid AUTHORS.md / TokenList / Obsidian-Vaults
+# false positives; added money-path / migration / login / ssh-key categories (were
+# missed in v1). 'vault' anchored 2026-06-29: bare 'vault' matched the Obsidian
+# knowledge-base path ~/Vaults/... and falsely flagged docs, cross-blocking other
+# projects' pushes; anchoring still catches vault.yaml, /vault/, secrets-vault, etc.
+SEC_RX='secret|scrub|credential|password|passwd|\.env|(^|[/._-])vault([/._-]|$)|trust-gate|proof-gate|proof-check|model-router|session-end|session-start|settings\.json|/hooks/|risk-manager|position-lifecycle|wallet|api[_-]?key|\.pem$|\.key$|id_rsa|/migrations?/|[/._-]migration|payment|charge|billing|/login|(^|/|[._-])auth([./_-]|$)|(^|[/._-])token([/._-]|$)|(^|[/._-])guard([/._-]|$)|\.sql$'
 
 parse() {
   python3 - <<'PY' 2>/dev/null
