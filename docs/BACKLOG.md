@@ -1520,3 +1520,25 @@ Both `www.flightclub33.com` and apex `flightclub33.com` currently serve the Clou
 5. Track its own adoption signal (Lesson 20): does it catch real skips without crying wolf?
 
 **Acceptance:** A deliberately-planted "recommendation without a preceding ctdd-precheck verdict" in a test transcript is flagged; a properly-gated recommendation is NOT flagged; the false-positive rate is low enough to act on; it has passed an adversarial-review for fail-open holes. Cross-ref: LESSON 27.10, LESSON 28, ctdd-precheck Step 0.
+
+---
+
+## [Open] — 2026-06-28 — PATS fidelity proof-check leftovers (M1 + 2 LOW; non-blocking)
+
+From the Tier-1 fidelity adversarial proof-check (memory `project_pats_fidelity_proofcheck_2026_06_28`). All deferred, none block the Tier-1 deploy.
+
+- **M1 (MEDIUM) — legacy geo row mis-charged a fee on close.** `src/core/paper-trading.ts:403-406` `pipelineFromRow` maps a hydrated Supabase row with a null/missing `pipeline` column + a non-`signal-bot` leader to `'copy'`, so a LEGACY geopolitics row (written before the `pipeline` column existed) hydrates as `copy` and is charged a Polymarket taker fee on close that a real geo trade must never pay (geo is fee-free). Current geo writes set `pipeline='geopolitics'` (geopolitics-executor.ts:491/532), so only pre-migration rows bite. **Fix:** also derive geo from the leader wallet (Tier-1 specialist watchlist) in `pipelineFromRow`, or treat unknown-pipeline non-signal rows conservatively.
+- **L1 (LOW) — non-atomic JSON writes.** `src/core/map-persistence.ts:22,49` use `writeFileSync` (truncate-in-place), so a crash mid-write truncates the file. Mitigated: load is non-fatal on corrupt JSON (returns empty) and the state self-heals (cooldown/consensus windows repopulate). **Fix:** temp-file + rename for durability.
+- **L2 (LOW) — `recentlyClosedMarkets` grows unbounded.** `src/execution/signal-executor.ts` set is pruned only on load; now that 3.3 persists it, the file grows with every market ever closed. Negligible at current scale. **Fix:** prune-before-persist.
+- **Also noted (already tracked, Tier-2):** unrealized (mark-to-market) drawdown blind spot in the equity breaker is PRE-EXISTING (old cash breaker had it too); the 30% stop-loss + 50% deep-drawdown backstop are the MTM net. Equity-based `max_drawdown` now surfaces to the dashboard (supabase.ts:291) — lower/more honest, display-only. Capital-partition overlap ($7050 > $6300) warn→throw is the existing Tier-2 (e) item.
+
+---
+
+## [Open] — 2026-06-29 — proof-gate hardening (from the cross-project block incident)
+
+The bare-'vault' SEC_RX false-positive was FIXED 2026-06-29 (commit bb5de44 — anchored 'vault' so Obsidian /Vaults/ docs stop flagging). Two follow-ups remain, intentionally NOT rushed into a security gate:
+
+- **Per-repo scoping (P1).** The push-block is GLOBAL: a non-empty `~/.claude/.proof-needed` blocks EVERY project's pushes, even when the flagged files belong to a different repo (stale PATS entries blocked a FlightClub push 2026-06-29 — collateral; the flagged file is not even in the other repo's changeset). Make the block check whether a flagged file belongs to the pushing repo (record repo root per entry; only block same-repo). CAUTION: narrowing a security gate must not open a bypass — adversarially review + proof-check before shipping.
+- **Flag hygiene / auto-clear (P1).** Entries linger because work cleared via `adversarial-review` does NOT wipe the note (only `/proof-check` does). Either have `adversarial-review` clear its reviewed entries on a clean pass, or add an age-based prune + a "reviewed" wipe. Interim rule: when a SEC_RX file is flagged, clear via `/proof-check` (wipes on a clean pass), not bare `adversarial-review`.
+
+Provenance: 2026-06-29 — stale PATS entries (risk-manager.ts proof-checked clean + 2 Obsidian docs false-positive) cross-blocked an unrelated FlightClub push. Memory: `project_session_handoff_2026_06_29`.
