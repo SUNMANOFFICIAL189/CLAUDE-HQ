@@ -80,7 +80,7 @@ DEFAULT_TIER = "sonnet"
 # TO RE-ENABLE when a new top-tier model ships: set FABLE_ENABLED = True. If the new
 # model has a different name, also update tier_for_model() + the emitted model id /
 # bare alias. See MODEL_ROUTING.md §5.5.
-FABLE_ENABLED = False
+FABLE_ENABLED = True  # re-enabled 2026-07-03: Anthropic restored Claude Fable 5 (claude-fable-5)
 DISABLED_TIER_FALLBACK = "opus"  # active ceiling a disabled top tier falls back to
 
 TIER_ORDER = {"haiku": 0, "sonnet": 1, "opus": 2, "fable": 3}

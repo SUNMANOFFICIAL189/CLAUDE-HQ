@@ -26,7 +26,7 @@ Out of scope: this doctrine does not control which *provider* is called by tools
 
 | Term | Meaning |
 |---|---|
-| **Tier** | Within-Anthropic class: Haiku → Sonnet → **Opus** (current ceiling). A 4th slot, **Fable**, is a RESERVED PLACEHOLDER — **disabled 2026-06-14**, see §5.5. Cheapest first; **routing never goes above Opus** (automatic or explicit). |
+| **Tier** | Within-Anthropic class: Haiku → Sonnet → **Opus** (ceiling for AUTOMATIC routing) → **Fable** (explicit-only top tier, **re-enabled 2026-07-03**, see §5.5). Cheapest first; **automatic routing never goes above Opus** — Fable is reached only via an explicit per-dispatch `model:`. |
 | **Provider** | Anthropic, Google (Gemini), Groq, Cerebras, OpenRouter, etc. |
 | **Hard floor** | Agent kinds that refuse to route below Opus regardless of cost. |
 | **Override** | Env-var or explicit `model:` param that bypasses the doctrine. |
@@ -72,7 +72,7 @@ Agents in this list **refuse all downgrades**. Even quota-aware degradation skip
 | `security-review` (matches existing skill) | Same as red-team. |
 | `architect`, `code-architect`, anything with `architect` in the kind | Architecture decisions cascade — re-doing them after the fact is expensive. |
 
-The hook checks `subagent_type` against this list (case-insensitive substring match). If matched, model = `opus` regardless of any other rule except `HQ_ROUTER_OFF=1`. **Opus is the MINIMUM here, not a cap** — the design lets an *enabled* above-Opus tier exceed it. But while the top tier is a disabled placeholder (§5.5), Opus is effectively the ceiling too: an explicit Fable request is **clamped DOWN to Opus**, not preserved.
+The hook checks `subagent_type` against this list (case-insensitive substring match). If matched, model = `opus` regardless of any other rule except `HQ_ROUTER_OFF=1`. **Opus is the MINIMUM here, not a cap** — the enabled above-Opus tier exceeds it: an explicit `model: claude-fable-5` on a hard-floor agent is **preserved** (Fable > Opus), while automatic hard-floor routing still forces exactly Opus (§5.5, Fable re-enabled 2026-07-03).
 
 ---
 
@@ -96,47 +96,51 @@ Match by keyword/intent in the dispatch's task description (the `prompt` argumen
 | Investor comms / materials | pitch, deck, memo, investor, fundraise | **Opus** | Hard floor. |
 | Legal / compliance | legal, compliance, regulatory, license | **Opus** | Hard floor. |
 
-If multiple keywords match, the tier with the highest priority (Opus > Sonnet > Haiku) wins. **Do not "sum" matches** — a single Opus keyword forces Opus. **No keyword maps to Fable** — the top slot is a disabled placeholder (§5.5).
+If multiple keywords match, the tier with the highest priority (Opus > Sonnet > Haiku) wins. **Do not "sum" matches** — a single Opus keyword forces Opus. **No keyword maps to Fable** — the top tier is explicit-only (enabled 2026-07-03) and never reached by automatic routing (§5.5).
 
 ---
 
-## 5.5 Top tier (above Opus) — Fable 5 DISABLED placeholder
+## 5.5 Top tier (above Opus) — Fable 5 ENABLED, explicit-only
 
-**Status: DISABLED as of 2026-06-14.** Anthropic disabled Claude Fable 5. The tier slot is kept as a
-**reserved placeholder** so a future above-Opus model can drop straight in — but it is switched OFF
-today, and **Opus is the active ceiling** for all routing (automatic and explicit).
+**Status: ENABLED as of 2026-07-03.** Anthropic restored Claude Fable 5 (`claude-fable-5`), so the top
+tier is switched back ON. It is the **explicit-only** premium tier ABOVE Opus: honored only when a
+caller passes it deliberately, **never auto-selected**. Opus remains the ceiling for all AUTOMATIC
+routing. (Disabled 2026-06-14 → re-enabled 2026-07-03 by flipping `FABLE_ENABLED`; the slot was kept
+in `TIER_ORDER` as a placeholder precisely so this was a one-line flip.)
 
-**What "disabled placeholder" means in practice:**
-- **Opus is the top of every path.** Automatic routing already never went above Opus; now the explicit
-  path matches it too.
-- **Explicit requests are clamped, not honored.** Any dispatch that passes `model: fable` /
-  `claude-fable-5` is bumped DOWN to Opus with an explanatory banner — emitting a disabled model would
-  otherwise fail the dispatch. (Previously, explicit Fable was preserved, even on hard-floor tasks.)
-- **The slot survives in code.** `fable` stays in `TIER_ORDER` (above opus) as the labelled empty
-  chair, so re-enabling is a one-line flip rather than a re-architecture.
+**What "enabled, explicit-only" means in practice:**
+- **Automatic routing still tops out at Opus.** No DOCTRINE keyword maps to Fable; the default is
+  Sonnet; the hard floor forces *Opus* (its minimum), not Fable. Nothing auto-escalates to the paid tier.
+- **Explicit requests are honored.** A dispatch that passes `model: claude-fable-5` (or the bare alias
+  `fable`) routes to Fable — including on hard-floor agents, where an explicit Fable exceeds the Opus
+  minimum and is preserved. `clamp_disabled_tier()` is a no-op while enabled.
+- **Env-var surfaces still reject it.** `HQ_MODEL_OVERRIDE=fable` and `HQ_MODEL_FLOOR=fable` are still
+  IGNORED (with a banner) — those two paths would auto-apply the paid tier to *every* routine dispatch,
+  which is the silent-burn footgun `/proof-check` caught on 2026-06-10. They stay closed whether Fable
+  is on or off. The ONLY way to reach Fable is a per-dispatch explicit `model:`.
 
-**Re-enabling (when a new above-Opus model ships):** set `FABLE_ENABLED = True` in
-`scripts/lib/model-router.py`. If the new model has a different name than Fable, also update
-`tier_for_model()` and the emitted model id / bare alias to match. Even when re-enabled, the top tier
-stays **explicit-only** (no DOCTRINE keyword maps to it; `HQ_MODEL_OVERRIDE` / `HQ_MODEL_FLOOR` reject
-it) — see the cost note below.
+**Enforcement (current):** `model-router.py` has `FABLE_ENABLED = True`; `fable` is in `TIER_ORDER`
+(above opus) but excluded from `AUTO_TIERS`. `normalise_auto_tier()` rejects `HQ_MODEL_OVERRIDE`/
+`HQ_MODEL_FLOOR = fable`; only `decide()` step 4 (explicit caller model) admits it. Verified 2026-07-03
+via `HQ_DRY_RUN=1` battery: explicit `claude-fable-5` → fable; explicit fable on hard-floor → fable;
+`HQ_MODEL_OVERRIDE=fable`/`HQ_MODEL_FLOOR=fable` → ignored → sonnet; routine `implement` → sonnet
+(never fable); `architect` hard-floor → opus. Normal Haiku/Sonnet/Opus routing unchanged.
 
-**Enforcement (current):** `model-router.py` keeps `fable` in `TIER_ORDER` but `FABLE_ENABLED = False`
-routes it through `clamp_disabled_tier()` → Opus. It stays excluded from `AUTO_TIERS`, and
-`normalise_auto_tier()` rejects `HQ_MODEL_OVERRIDE=fable` / `HQ_MODEL_FLOOR=fable` (with a
-state-aware banner). Verified 2026-06-14: explicit `claude-fable-5`, bare `fable`, and hard-floor +
-explicit-Fable all route to Opus; normal Haiku/Sonnet/Opus routing is unchanged.
+**Why the top tier stays explicit-only even when enabled — the cost reason:** on a Max plan,
+Haiku/Sonnet/Opus are covered by the flat subscription (no marginal $ within the rolling window). A
+premium above-Opus model may bill as pay-as-you-go usage credits ON TOP of Max. Auto-routing a
+pay-per-use model is a silent-real-$-burn footgun (the 2026-04-28 quota-incident class, with literal
+credits) — so the top tier is never auto-selected; the operator/Commander chooses it deliberately per
+task. Prefer it for the hardest / longest-horizon reasoning where the quality delta pays for itself.
 
-**Why a top tier stays explicit-only even when enabled — the cost reason (retained for the next
-model):** on a Max plan, Haiku/Sonnet/Opus are covered by the flat subscription (no marginal $ within
-the rolling window). A premium above-Opus model is liable to bill as pay-as-you-go usage credits ON
-TOP of Max. Auto-routing a pay-per-use model is a silent-real-$-burn footgun (the 2026-04-28
-quota-incident class, with literal credits) — so the top tier is never auto-selected; the
-operator/Commander chooses it deliberately.
+**Cost note (verify before heavy use):** Fable historically listed at `$10/M in · $50/M out` and was
+free on Max through 2026-06-22 during its first run. Its **current** pricing / free-on-Max status after
+this restoration is **unconfirmed** — treat as paid usage-credits until verified, and confirm terms
+before a token-heavy Fable job.
 
-**Historical note (superseded 2026-06-14):** Fable 5 (`claude-fable-5`, $10/M in · $50/M out) was
-added 2026-06-10 as an explicit-only tier and was free on Max through 2026-06-22 (then usage credits).
-That free-window policy is moot now that the model is disabled; this section supersedes it.
+**Disabling again (if Anthropic pulls it):** set `FABLE_ENABLED = False` in
+`scripts/lib/model-router.py` — `clamp_disabled_tier()` then bumps any explicit Fable request down to
+Opus so no dispatch fails on a dead model id.
 
 ---
 
@@ -341,8 +345,8 @@ The router never bypasses Trust Gate. If a provider's allowlist status changes (
 
 Update this file when:
 
-- A new tier becomes available (e.g. a new Anthropic tier between Sonnet and Opus). *(Fable 5 added 2026-06-10 as the explicit-only top tier; DISABLED 2026-06-14 — slot kept as a placeholder, §5.5.)*
-- **TOP-TIER PLACEHOLDER:** when a new above-Opus model ships, re-enable via `FABLE_ENABLED = True` in `scripts/lib/model-router.py` (+ rename the slot / model id if needed) per §5.5. The 2026-06-22 free-on-Max revisit is now moot (Fable disabled 2026-06-14); revisit if/when Anthropic restores or replaces the top tier.
+- A new tier becomes available (e.g. a new Anthropic tier between Sonnet and Opus). *(Fable 5 added 2026-06-10 as the explicit-only top tier; DISABLED 2026-06-14; RE-ENABLED 2026-07-03 when Anthropic restored it, §5.5.)*
+- **TOP-TIER SWITCH:** Fable is currently ENABLED (`FABLE_ENABLED = True`) and explicit-only. If Anthropic pulls it again, set `FABLE_ENABLED = False` (clamp handles the dead-id case). If a *different* above-Opus model ships, re-point `tier_for_model()` + the emitted id/alias per §5.5. **Open item:** confirm Fable's current pricing / free-on-Max status post-restoration before any token-heavy Fable job (unverified as of 2026-07-03).
 - A new provider gets added to Phase 2 chain.
 - The cost ledger reveals a doctrine row is consistently mis-routing (quality gate persistent disagreement, or human override frequency on a specific keyword).
 - A new agent kind is added to the hard floor (or removed — rare).
