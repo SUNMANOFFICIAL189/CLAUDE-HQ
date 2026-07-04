@@ -5,7 +5,7 @@
   "identity": "CLAUDE HQ",
   "description": "The central command center for JARVIS — an autonomous agentic system. Claude always references this for major projects. Commander orchestrates all tools.",
   "tool_count": 39,
-  "skill_count": 10,
+  "skill_count": 11,
   "auto_trigger_rules": [
     "ANY PRD provided or referenced by the user triggers CLAUDE HQ activation — this means a long-running project",
     "ANY mention of 'build me', 'create an app', 'develop a system' triggers full-stack activation",
@@ -1520,6 +1520,16 @@
       "type": "skill_file",
       "auto_activate": false,
       "priority": "HIGH"
+    },
+    {
+      "id": "handoff-skill",
+      "name": "Handoff — single living context doc (zero context loss)",
+      "file": "~/.claude/skills/handoff/SKILL.md",
+      "type": "skill_file",
+      "category": "memory",
+      "auto_activate": true,
+      "priority": "HIGH",
+      "description": "Project-agnostic zero-loss handoff. Sole writer of the per-project HANDOFF.md. Bare /handoff = read-only RESUME (code wins on doc-vs-code conflict); /handoff save = CTDD checkpoint + fail-closed secret gate + output gate. Auto-surfaced at session start (hook); mechanical last-session backstop at session end (hook). Supersedes ECC save-session + PAUL /paul:handoff for handoff authoring; /save delegates its HANDOFF layer here. Chassis = OFFLIMITS method; grafts = APM code-wins, ykdojo dead-ends, mattpocock structural secret gate."
     }
   ],
   "tool_combinations": [

@@ -2,8 +2,9 @@
 name: save
 description: >
   Project-aware memory persistence, triggered by /save. Captures the session into every
-  relevant memory layer — the auto-memory note, HANDOFF.md, Obsidian (Hub + Decision Log),
-  MemPalace, graphify, and claude-mem — behind a CTDD output gate (reconcile to verified
+  relevant memory layer — the auto-memory note, Obsidian (Hub + Decision Log),
+  MemPalace, graphify, and claude-mem (the HANDOFF.md layer is delegated to the /handoff skill,
+  its sole writer) — behind a CTDD output gate (reconcile to verified
   truth, mark ASSUMPTIONs, stop and wait for go), then backs up the vault and chains /sync
   to push the code repo. Append-only on Decision Logs; never records an unverified claim as
   fact. Mirrors the OFFLIMITS SAVE_AND_SYNC method + the HQ Second Brain Auto-Sync Protocol.
@@ -22,7 +23,7 @@ Decision Logs and LESSONS are **append-only** — prior entries are never edited
 From the current working directory, determine and REPORT:
 - `repo_root = git rev-parse --show-toplevel` (or cwd if not a repo); derive `project` name.
 - **Auto-memory note:** `~/.claude/projects/-Users-sunil-rajput/memory/project_<project>*.md` + the `MEMORY.md` index. (The richest running state.)
-- **HANDOFF.md** in the repo root (if present).
+- **HANDOFF.md** — owned by the `/handoff` skill (its sole writer). `/save` may READ it for context but never writes it; it delegates the handoff layer (see STEP 3).
 - **Obsidian vault folder:** `~/Vaults/Jarvis-Brain/JARVIS-BRAIN/Projects/<project>/` — its Hub + Decision Log.
 - **MemPalace wing:** `mempalace.yaml` in repo / palace at `~/.mempalace/palace/`.
 If any target does NOT exist, say so plainly — do NOT fabricate a vault folder or a note.
@@ -36,7 +37,7 @@ cannot verify as **ASSUMPTION** and list it. Never write an unverified claim as 
 ## STEP 2 — OUTPUT GATE (stop and wait)
 Show a concise summary of every proposed write:
 - Auto-memory note: status + new facts (diff summary).
-- HANDOFF.md: which sections change + new "last verified" date.
+- HANDOFF.md: (delegated — `/save` does not write it; chain `/handoff save` if a refresh is warranted).
 - Obsidian: Hub "Current State" update + the new dated Decision Log entries (append-only).
 - Which miners will run: `mempalace mine`, graphify refresh.
 - Every ASSUMPTION needing your confirmation.
@@ -45,8 +46,10 @@ Show a concise summary of every proposed write:
 ## STEP 3 — Write the knowledge layers (on go)
 - **Auto-memory note** — update running state; keep it the richest source. Update the
   `MEMORY.md` index pointer line.
-- **HANDOFF.md** (if present) — update the status/current-state section + last-verified date.
-  Append to its Decision Log; **never edit or delete prior entries**.
+- **HANDOFF.md** — do NOT write it here. `/handoff` is the SOLE writer of the handoff doc. If a
+  handoff refresh is warranted this session, chain **`/handoff save`** (it runs its own CTDD reconcile,
+  fail-closed secret gate, and output gate). `/save` owns the other memory layers; the handoff layer
+  is delegated so there is exactly one writer and no drift.
 - **Obsidian** — append new dated, provenance-tagged Decision Log entries; update the Hub
   "Current State". Append-only on logs; Glossary additions only, never redefinitions.
 - **claude-mem** — always-on via hooks; no action (note it ran).
@@ -74,6 +77,7 @@ ahead/behind 0), and list any ASSUMPTIONs still awaiting your confirmation.
 - If a memory target is missing for this project, report it — never fabricate one.
 
 ## Relationship to other skills
+- **`/handoff`** owns the per-project `HANDOFF.md` (sole writer). `/save` delegates that layer to it and never writes the handoff doc directly.
 - Calls `/sync` as its final code-repo step.
 - Mirrors OFFLIMITS `_PROMPTS/SAVE_AND_SYNC.md` and the CLAUDE.md Second Brain Auto-Sync Protocol.
 - The Stop hook (`watchdog/hooks/session-end.sh`) does some of this automatically at session

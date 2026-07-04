@@ -1542,3 +1542,19 @@ The bare-'vault' SEC_RX false-positive was FIXED 2026-06-29 (commit bb5de44 — 
 - **Flag hygiene / auto-clear (P1).** Entries linger because work cleared via `adversarial-review` does NOT wipe the note (only `/proof-check` does). Either have `adversarial-review` clear its reviewed entries on a clean pass, or add an age-based prune + a "reviewed" wipe. Interim rule: when a SEC_RX file is flagged, clear via `/proof-check` (wipes on a clean pass), not bare `adversarial-review`.
 
 Provenance: 2026-06-29 — stale PATS entries (risk-manager.ts proof-checked clean + 2 Obsidian docs false-positive) cross-blocked an unrelated FlightClub push. Memory: `project_session_handoff_2026_06_29`.
+
+---
+## 2026-06-29 — FLIGHTCLUB.33-WEBAPP-v2 Inc 5 proof-check follow-up (LOW)
+**Source:** adversarial-review of Inc 5 (Phase-3 secure storage). Fresh-Claude-agent (Codex 401). Proof-check PASSED — zero CRITICAL/HIGH/MEDIUM; all 10 security contract clauses verified solid.
+**LOW (data-integrity, not security):** client-claimed `content_type`/`size` at `upload-complete` can differ from what was minted/PUT (both must still be allowlisted; bucket bytes are content-type-bound by the signed PUT; key is scoped to the client's own case/request → no cross-case leak, no traversal). DB stores the client's claim as advisory metadata. **Fix when convenient (NOT blocking):** in `client_upload_complete`/`attach_object_for_token`, reconcile the claimed content_type/size against the upload-url's minted values (or, at go-live, read the object's true size/content-type back from GCS after the PUT). Files: backend/app/main.py (upload-complete), backend/app/db.py (attach_object_for_token).
+
+---
+
+## [Open] — 2026-07-04 — /handoff skill proof-check deferrals (2 items; non-blocking)
+
+From the wide adversarial proof-check of the new `/handoff` skill build (this session). CRITICAL C1 (secret-gate NUL fail-open) and HIGH H1 (constitution → AMBIGUOUS locator) were FIXED + re-verified inline; M1/M2/L1/L3 also fixed. These two remain, deferred:
+
+- **M3 (MEDIUM) — multi-line / header-stripped secrets are undetectable by the line-based gate.** `~/.claude/skills/handoff/scripts/secret-gate.sh` HIGH patterns are single-line ERE, so a JWT wrapped over several lines, a PEM body pasted WITHOUT its `-----BEGIN…-----` header, or a bare high-entropy base64 blob will pass "clean". Mitigations already in place: NUL files are refused outright (fail-closed), and the skill + gate header forbid pasting multi-line credential blobs (env-var NAMES only). **Fix when convenient:** add a base64/high-entropy run heuristic (warn on any line with a ≥40-char high-entropy base64 run) to catch header-stripped key material. Non-blocking because the doctrine already bans multi-line secret pastes.
+- **L2 (LOW) — pre-existing: session hooks' `curl` to Hindsight has no timeout → can hang session start/end.** `~/.claude/hooks/session-start.sh` + `session-end.sh` call `curl -sf "$HINDSIGHT_URL/…"` with no `--connect-timeout`/`--max-time`. Default `localhost:8888` refused → instant (fine), but an env-overridden or black-holed host makes curl wait the full default timeout, blocking the interactive session — which the hook contract says must never hang. Pre-existing (not introduced by the /handoff work). **Fix:** add `--connect-timeout 2 --max-time 4` to both curls.
+
+Provenance: 2026-07-04 — proof-check of the /handoff build. Plan: `~/.claude/plans/wild-churning-thunder.md`.
