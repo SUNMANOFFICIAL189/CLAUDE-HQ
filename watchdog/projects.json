@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_updated": "2026-06-03",
+  "last_updated": "2026-07-05",
   "description": "Projects watched by the HQ Watchdog. Each entry is one project the watchdog ingests commits, sessions, and (optionally) lessons for. claude-hq is the default project \u2014 used as fallback when no project is specified, but holds no special status in the code.",
   "projects": [
     {
@@ -57,6 +57,14 @@
       "lessons_path": null,
       "added": "2026-06-03",
       "notes": "Content agency (renamed from OFFSCRIPT). git repo content-creation-agency; canonical copy MOVED to the external drive 2026-06-03, so repo_path is only readable when /Volumes/Elements is mounted (watchdog skips it when the drive is unmounted). Worked mainly via Cowork, so Claude Code session-file ingestion may not capture sessions; commit-watching works when mounted. Hybrid asset policy (raw image pools drive-only). Layers 0+A+B."
+    },
+    {
+      "name": "bidfill",
+      "display_name": "BidFill",
+      "repo_path": "/Users/sunil_rajput/projects/bidfill",
+      "lessons_path": null,
+      "added": "2026-07-05",
+      "notes": "Product (sig-D-01) built out of the get-rich-scheme pipeline. Auto-fills public-agency bid PDFs from a saved contractor profile. Own repo SUNMANOFFICIAL189/bidfill (private). Web = Next.js on Cloudflare Pages; data = Supabase+RLS; fill engine = Python worker on Hetzner CX23 (77.42.43.44); LLM = paid-tier Gemini. Two spikes green (detection + placement). Phase 4 build started 2026-07-05 on Opus 4.8 + phased orchestration. Layers 0+A+B (A=worker resilience; not C/D, single product). Spec + spikes live in ../get-rich-scheme."
     }
   ]
 }
