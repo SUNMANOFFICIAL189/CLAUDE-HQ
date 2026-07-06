@@ -1560,3 +1560,25 @@ From the wide adversarial proof-check of the new `/handoff` skill build (this se
 - **L2 (LOW) — pre-existing: session hooks' `curl` to Hindsight has no timeout → can hang session start/end.** `~/.claude/hooks/session-start.sh` + `session-end.sh` call `curl -sf "$HINDSIGHT_URL/…"` with no `--connect-timeout`/`--max-time`. Default `localhost:8888` refused → instant (fine), but an env-overridden or black-holed host makes curl wait the full default timeout, blocking the interactive session — which the hook contract says must never hang. Pre-existing (not introduced by the /handoff work). **Fix:** add `--connect-timeout 2 --max-time 4` to both curls.
 
 Provenance: 2026-07-04 — proof-check of the /handoff build. Plan: `~/.claude/plans/wild-churning-thunder.md`.
+
+---
+
+## [Open] — 2026-07-06 — BidFill Phase 1 deferred items (from the output phase gate)
+
+From the Phase-1 (data + auth) output gate (ctdd-precheck + 3 Fable-5 lenses). CRITICAL/HIGH findings were FIXED + tested this session (bid_jobs forged-`profile_id` exfil → `create_bid_job` RPC; rate-limiter IP spoof; open-redirect; attribution-500; unbounded-PII list; two TOCTOU races; PUBLIC execute grants; secrets-in-repo; CI fail-open). These non-blocking items are deferred to their natural phases:
+
+- **Live Google OAuth + Resend SMTP (before real users).** Magic-link is verified via the Supabase admin API (generateLink+verifyOtp), NOT a real email round-trip; Google OAuth provider is unconfigured. Configure Google Cloud OAuth creds in Supabase + wire Resend as custom SMTP, then add the B9 attribution test + an identity-linking test (magic-link then Google, same email → one users_profile).
+- **pg_cron heartbeat (do BEFORE leaving the dev DB idle).** Supabase free project pauses after 7 idle days; add a pg_cron ping or scheduled health hit. `docs/SUPABASE_CONFIG.md` notes it.
+- **Expired-PDF purge cron (Phase 2).** Soft-delete + 7-day TTL exist; hard-delete of versions + R2 objects after grace is unbuilt (Phase 2, R2). `rate_limits` table also needs a periodic purge.
+- **teams.max_seats client-writable (Phase 4).** An owner can set max_seats to any value; accept_team_invite then enforces a cap the client wrote. Lock at team-creation in Phase 4 (Office monetization).
+- **stripe_events dedupe + credit-ledger tables (Phase 4).** Additive Phase-4 migrations (webhook idempotency by event.id; Top-Up/Founder Fill-Bank as a credit ledger, not a subscription row).
+- **Account-deletion / email-change / invite-send flows.** Schema decisions landed (restrict/set-null, accept_team_invite); user-facing flows are Phase 3/5.
+- **Test rigor: two-connection versioning-concurrency test.** The row-lock SQL is correct (verified by reading); the Promise.all test rarely overlaps in-DB, so it proves "no collision this run", not serialization. Add a `pg` two-open-transaction test.
+- **middleware.ts → proxy.ts re-check.** Next 16 deprecates middleware.ts for proxy.ts, but OpenNext Cloudflare does not run proxy.ts (opennextjs-cloudflare#962). We use middleware.ts (CI-guarded). Re-check at any Next upgrade / when #962 closes.
+
+From the final `/proof-check` of the fixes (2026-07-06, all fail-closed/latent, none blocking):
+- **accept_team_invite email match is case-sensitive (latent).** `team_invites.email` is stored as the owner typed it; GoTrue lowercases `auth.users.email`, so an invite for `Bob@Acme.com` would permanently reject the legit invitee. Latent (no invite-creation UI yet). Fix when the invite flow lands: `lower(btrim(...))` compare, or normalize at insert.
+- **Anon RLS tests pass via the error path, not "0 rows".** After the anon revokes, an anon query on a policy that calls `get_my_team_id()` errors (permission denied) instead of returning empty; the tests assert `data ?? []` so they pass either way. Fix (test rigor): assert `error` is null (or explicitly expect 42501) in the anon cases so they prove what they claim.
+- **create_bid_job validates profile_id but not source_object_key (Phase 2).** Not a regression (no upload surface exists yet). When the R2 upload layout lands, enforce a per-tenant key prefix (`p_source_object_key like uid || '/%'`) inside the RPC so a client can't point a job at another tenant's uploaded PDF.
+
+Provenance: 2026-07-06 — BidFill Phase 1 output gate + final /proof-check. Repo `~/projects/bidfill`; detail in its `MISSION_BOARD.md` checkpoint 2026-07-06 + `HANDOFF.md`.
