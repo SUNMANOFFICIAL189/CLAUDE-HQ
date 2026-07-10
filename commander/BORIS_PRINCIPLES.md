@@ -43,6 +43,12 @@
 - **Simplicity First:** Make every change as simple as possible. Impact minimal code.
 - **No Laziness:** Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact:** Changes should only touch what's necessary. Avoid introducing bugs.
+  When editing existing code as part of a focused task (a feature, a fix), keep the edit surgical:
+  - Every changed line must trace directly to the request. If a line doesn't, don't change it.
+  - Match the surrounding style even if you'd write it differently — don't restyle, reformat, or rename in passing.
+  - Don't polish adjacent code, comments, or logic you weren't asked to touch.
+  - Remove only the imports/variables/functions your own change left unused. Leave pre-existing dead code in place — flag it to the operator, don't delete it.
+  - Exception: when cleanup or a refactor *is* the task, "No Laziness" and the `refactor-cleaner` agent govern instead. This restraint is for incidental edits, not commissioned cleanup.
 
 ### Task Management
 1. **Plan First:** Write plan to mission board with checkable items.
