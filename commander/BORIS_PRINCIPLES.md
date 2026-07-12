@@ -1,5 +1,6 @@
 # Engineering Principles
 ## Derived from Boris Cherny (creator of Claude Code)
+## Simplicity-ladder clauses under Core Principles adapted from ponytail (DietrichGebert, MIT), 2026-07-12 — ideas grafted, code not installed.
 
 ### Planning
 - Decompose before executing. Always.
@@ -42,6 +43,10 @@
 ### Core Principles
 - **Simplicity First:** Make every change as simple as possible. Impact minimal code.
 - **No Laziness:** Find root causes. No temporary fixes. Senior developer standards.
+- **The simplicity ladder:** *Simplicity First* says be simple; this says *how*, in order. Before writing new code, climb — stop at the first rung that holds: (1) does this need to exist at all? Speculative need → skip it, say so in one line. (2) Is it already in this codebase — a helper, util, type, pattern a few files over? Reuse it. (3) Does the standard library do it? (4) Does a native platform feature cover it (a DB constraint over app code, CSS over JS)? (5) Does an already-installed dependency solve it? Never add a new one for what a few lines can do. (6) Can it be one line? (7) Only then: the minimum code that works. Two rungs work → take the higher one and move on.
+- **Never lazy about understanding.** The ladder shortens the *solution*, never the *reading*. Trace the whole thing first — every file the change touches, the actual flow end to end — then climb. The smallest change in the wrong place isn't lazy, it's a second bug: a confident wrong fix dressed up as efficiency. Read fully, then be lazy.
+- **Bug fix = root cause, not symptom.** A report names a symptom. Before editing, grep every caller of the function you're about to touch. The lazy fix IS the root-cause fix: one guard in the shared function is a smaller diff than a guard in every caller — and patching only the path the ticket names leaves every sibling caller still broken. Fix it once, where all callers route through. (This operationalizes *No Laziness* above.)
+- **Mark deliberate corner-cuts honestly.** When you knowingly cut a real corner with a known ceiling (a global lock, an O(n²) scan, a naive heuristic), leave a one-line comment naming BOTH the ceiling and the upgrade path — e.g. `# shortcut: global lock; switch to per-account locks if throughput matters`. A silent shortcut is a trap for the next reader; a marked one is a documented, findable decision. (Never simplify away: input validation at trust boundaries, error handling that prevents data loss, security, accessibility, or anything explicitly requested — those are not corners to cut.)
 - **Minimal Impact:** Changes should only touch what's necessary. Avoid introducing bugs.
   When editing existing code as part of a focused task (a feature, a fix), keep the edit surgical:
   - Every changed line must trace directly to the request. If a line doesn't, don't change it.

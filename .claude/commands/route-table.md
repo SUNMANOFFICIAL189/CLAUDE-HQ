@@ -24,6 +24,8 @@ Then add this footer:
 
 > **Hard floor agents** (always Opus regardless of keywords): `*-reviewer`, `architect`, `red-team`, `investor-*`, `legal-review`, `security-review`.
 >
+> **Fable 5 (top tier, METERED $10/M in · $50/M out):** explicit-only AND consent-gated — requires `model: claude-fable-5` on the dispatch PLUS a per-approval single-use token `FABLE-OK:<nonce>` in the dispatch prompt. Without a valid token the router **DENIES** the dispatch (it cannot silently downgrade — `modifyToolInput` is ignored on this build); re-dispatch on opus/sonnet/haiku, or get operator consent and add a fresh `FABLE-OK:<nonce>` (MODEL_ROUTING.md §5.5).
+>
 > **Overrides** (set in shell): `HQ_ROUTER_OFF=1`, `HQ_MODEL_OVERRIDE=opus|sonnet|haiku`, `HQ_MODEL_FLOOR=sonnet`, `HQ_QUOTA_AWARENESS=off`.
 >
 > Full doctrine: `~/claude-hq/commander/MODEL_ROUTING.md`. Use `/route preview "<text>"` to dry-run any task description.

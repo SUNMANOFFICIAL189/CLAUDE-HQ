@@ -45,6 +45,11 @@ Out of scope: this doctrine does not control which *provider* is called by tools
      b. Dispatch's model:<x>        → caller's choice
      c. Doctrine keyword match      → tier from §5 table
      d. Default                     → sonnet
+2.5. METERED TOP-TIER GATE (§5.5):   requested model resolving to fable WITHOUT
+                                      a valid single-use FABLE-OK:<nonce> prompt
+                                      sentinel → dispatch is DENIED (the router's
+                                      single deny case; keyed on the raw request,
+                                      no route-around; fails closed on crash)
 3. HARD FLOOR GUARD (§4):
      If subagent_type matches the hard-floor list → force opus
      (overrides any choice in step 2 except HQ_ROUTER_OFF=1)
@@ -133,10 +138,56 @@ pay-per-use model is a silent-real-$-burn footgun (the 2026-04-28 quota-incident
 credits) — so the top tier is never auto-selected; the operator/Commander chooses it deliberately per
 task. Prefer it for the hardest / longest-horizon reasoning where the quality delta pays for itself.
 
-**Cost note (verify before heavy use):** Fable historically listed at `$10/M in · $50/M out` and was
-free on Max through 2026-06-22 during its first run. Its **current** pricing / free-on-Max status after
-this restoration is **unconfirmed** — treat as paid usage-credits until verified, and confirm terms
-before a token-heavy Fable job.
+**Cost — VERIFIED METERED (2026-07-12):** Fable 5 bills **$10/M input · $50/M output** (2× Opus 4.8;
+per platform.claude.com model docs). Anthropic officially announced removing Fable from Pro/Max/Team
+flat-rate coverage (original date 2026-06-23 plus conditionally-extended windows; the final cutoff was
+reported around 2026-07-13). The 2026-07-03 "operator-confirmed free on Max" status is SUPERSEDED.
+Every Fable dispatch is a real-dollar event.
+
+**The metering gate — `FABLE-OK:<nonce>` sentinel + DENY (added 2026-07-12, hardened same day):**
+while `FABLE_METERED = True` in `scripts/lib/model-router.py`, a dispatch whose **requested model**
+resolves to fable is **DENIED** (PreToolUse `permissionDecision: "deny"`, with a corrective message)
+unless its dispatch **prompt** carries a valid consent token of the form `FABLE-OK:<nonce>`, where
+`<nonce>` is ≥4 alphanumeric/hyphen characters the Commander **mints fresh per operator approval**.
+Two hardening properties (from the 2026-07-12 proof gate):
+- **Un-forgeable-by-quotation (H1):** the token is matched by a regex requiring the `:<nonce>` suffix,
+  NOT a bare substring — so prose that merely quotes this doctrine (which contains the bare word
+  "FABLE-OK" and the literal template `FABLE-OK:<nonce>` with unmatchable angle brackets) can never
+  self-authorize a dispatch. A quoted ticket that reviews the metering feature stays denied.
+- **Single-use (H3):** each nonce is recorded in `run/.fable-nonces` when spent; reusing a nonce is
+  DENIED. **One operator approval = one nonce = one dispatch.** A prior yes never covers a later
+  dispatch. (Single-use fails OPEN only on a nonce-store read error — a narrow belt-and-suspenders
+  gap; the un-forgeable format is the primary defence and the core deny still fails CLOSED.)
+- **Fail CLOSED on crash (C1):** `main()` wraps processing in a backstop — a schema-violating dispatch
+  (non-string `model`/`prompt`) is coerced (erring toward blocking) and, on any residual crash, a
+  positively-identified unauthorized metered-fable Agent dispatch is DENIED rather than allowed.
+
+Why deny rather than downgrade: **verified 2026-07-12 by session-transcript forensics that this
+Claude Code build IGNORES the router's `modifyToolInput`** (a Plan agent ran Fable and a
+security-reviewer ran Sonnet despite Opus emissions) — so a "capped" dispatch would still RUN Fable at
+real cost; refusing it is the only real cap, and the failure mode is benign (the caller re-dispatches
+on a subscription tier, or with consent + a fresh nonce). This is the router's SINGLE deny case,
+keyed on the raw request so no branch routes around it. Rationale for a prompt sentinel: the model
+field cannot carry intent — a Fable main-loop session stamps `model:"fable"` reflexively (49 ledger
+rows of casual `current-tier-floor` inheritance pre-fix) — whereas the prompt is written only by a
+deliberate caller. **Honest limit:** the sentinel is an *intent signal*, not a *verified consent* —
+code cannot confirm the operator actually said yes (the calling LLM writes the token); it enforces
+"not accidental/inherited" and "not reused", while the operator-said-yes property is doctrine-enforced
+(Lesson 17) and audited after the fact via `/route-fable`'s ALLOWED/DENIED counts. Keep Fable briefs
+curated: soft cap ~30k input tokens (≈ $0.30 in). Un-metering rollback: one line,
+`FABLE_METERED = False`. Note: `HQ_ROUTER_OFF=1` bypasses the deny (router-off means the operator's
+literal choice stands — the metered banner still prints). The operator's default session model moved
+to `claude-opus-4-8[1m]` the same day (settings.json) — the main loop must never idle on a metered
+model, because inherited (no-`model`-param) dispatches from a Fable session are invisible to this gate.
+
+**Enforcement honesty (verified 2026-07-12):** the router CANNOT change a dispatch's model on this
+build — `modifyToolInput` is ignored. What actually controls a subagent's model, in precedence
+order: explicit `model:` param on the dispatch (verified honored 2026-07-05) → the agent
+definition's frontmatter model (e.g. plugin reviewer agents pin sonnet) → session-model inheritance
+(with built-in caps for some agent types; `Explore` capped at Opus). Consequence: **doctrine tiers
+are enforced by the Commander passing explicit `model:` params per dispatch** — the router is the
+ledger + transparency banner + the metered-fable deny gate. Its haiku/sonnet/opus "decisions" are
+advisory recommendations unless echoed as explicit params.
 
 **Disabling again (if Anthropic pulls it):** set `FABLE_ENABLED = False` in
 `scripts/lib/model-router.py` — `clamp_disabled_tier()` then bumps any explicit Fable request down to
@@ -346,7 +397,7 @@ The router never bypasses Trust Gate. If a provider's allowlist status changes (
 Update this file when:
 
 - A new tier becomes available (e.g. a new Anthropic tier between Sonnet and Opus). *(Fable 5 added 2026-06-10 as the explicit-only top tier; DISABLED 2026-06-14; RE-ENABLED 2026-07-03 when Anthropic restored it, §5.5.)*
-- **TOP-TIER SWITCH:** Fable is currently ENABLED (`FABLE_ENABLED = True`) and explicit-only. If Anthropic pulls it again, set `FABLE_ENABLED = False` (clamp handles the dead-id case). If a *different* above-Opus model ships, re-point `tier_for_model()` + the emitted id/alias per §5.5. **Open item:** confirm Fable's current pricing / free-on-Max status post-restoration before any token-heavy Fable job (unverified as of 2026-07-03).
+- **TOP-TIER SWITCH:** Fable is currently ENABLED (`FABLE_ENABLED = True`), explicit-only, AND METERED (`FABLE_METERED = True`, single-use `FABLE-OK:<nonce>` prompt sentinel required — §5.5). If Anthropic pulls it again, set `FABLE_ENABLED = False` (clamp handles the dead-id case). If it returns to flat-rate coverage, set `FABLE_METERED = False`. If a *different* above-Opus model ships, re-point `tier_for_model()` + the emitted id/alias per §5.5. Pricing CONFIRMED 2026-07-12: $10/M in · $50/M out, removed from subscription plans (closes the 2026-07-03 open item).
 - A new provider gets added to Phase 2 chain.
 - The cost ledger reveals a doctrine row is consistently mis-routing (quality gate persistent disagreement, or human override frequency on a specific keyword).
 - A new agent kind is added to the hard floor (or removed — rare).

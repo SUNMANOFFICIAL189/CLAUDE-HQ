@@ -79,7 +79,11 @@ script MUST contain, non-negotiably:
    with a "needs human" flag. Never loop a fix forever.
 4. **Model tiering (cost):** grunt/read/find agents → `model: 'haiku'` or `'sonnet'`;
    synthesis + final verification → omit (inherit Opus) or `'opus'`. Opus only where
-   calibre is decided.
+   calibre is decided. **NEVER set `model: 'fable'`/`'claude-fable-5'` on any `agent()`
+   call** — Fable is metered ($10/M in, $50/M out) and the router's metered-Fable deny
+   gate covers ONLY top-level `Agent` dispatches, not `Workflow`-internal `agent()` spawns,
+   so a Fable worker here bills UNCAUGHT (MODEL_ROUTING.md §5.5). Fable is planner/reviewer
+   only, via a consent-gated top-level dispatch — never a workflow worker.
 5. **Mandatory adversarial-verify stage:** any workflow that emits a claim, finding, or
    code passes each item through a *separate* verifier agent (different agent; ideally a
    different lens). Burn test: this killed 25% of bad output. Optionally route the verifier

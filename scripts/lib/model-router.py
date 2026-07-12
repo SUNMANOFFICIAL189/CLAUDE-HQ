@@ -10,8 +10,12 @@ Reads hook JSON from stdin, decides the right tier, logs the decision to
 the cost ledger, prints a transparency banner to stderr, and (where Claude
 Code supports it) modifies tool_input.model.
 
-Exit code: always 0 — never block dispatches. Degraded routing is the
-failure mode, not a halted Agent call.
+Exit code: always 0. Routing never blocks dispatches, with ONE deliberate
+exception (2026-07-12): an unauthorized METERED-Fable dispatch (model resolves
+to fable, no FABLE-OK consent sentinel in the prompt) is DENIED via
+permissionDecision — because modifyToolInput enforcement was disproven on this
+build, deny is the only real cap on a real-dollar dispatch. Everything else:
+degraded routing is the failure mode, not a halted Agent call.
 
 Modes:
   Normal   — invoked by Claude Code as a PreToolUse hook
@@ -23,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -65,22 +70,36 @@ DOCTRINE = [
 
 DEFAULT_TIER = "sonnet"
 
-# --- Top-tier placeholder switch (FABLE_ENABLED) ---------------------------
-# Fable 5 (Mythos-class) was the explicit-only premium tier ABOVE Opus. Anthropic
-# DISABLED Fable on 2026-06-14, so its slot is now a RESERVED PLACEHOLDER: kept in
-# TIER_ORDER below so a future above-Opus model can slot straight in, but switched
-# OFF today. While OFF, any explicit `model: fable`/`claude-fable-5` request is
-# clamped DOWN to the active ceiling (Opus) instead of being honored — emitting a
-# disabled model would otherwise fail the dispatch (see clamp_disabled_tier).
+# --- Top-tier switch (FABLE_ENABLED) + metering gate (FABLE_METERED) -------
+# Fable 5 (Mythos-class) is the explicit-only premium tier ABOVE Opus. Enabled
+# (re-enabled 2026-07-03 when Anthropic restored claude-fable-5) AND METERED:
+# Anthropic removed Fable from Pro/Max flat-rate coverage (verified 2026-07-12,
+# $10/M in · $50/M out — 2× Opus). While metered, a dispatch whose requested
+# model resolves to fable is DENIED by main()'s deny gate UNLESS the prompt
+# carries a valid single-use `FABLE-OK:<nonce>` consent token — the in-transcript
+# consent artifact (Lesson 17). An inherited/casual `model: fable` stamp (the
+# current-tier-floor leak, 49 ledger rows pre-fix) has no token → denied. The
+# token lives in the PROMPT, not the model field, because
+# a Fable main loop stamps the model field reflexively — the harness never
+# auto-fills prompts, so the sentinel is unambiguous intent.
 #
-# Fable was ALSO always excluded from AUTOMATIC routing (no DOCTRINE keyword maps to
-# it; HQ_MODEL_OVERRIDE/HQ_MODEL_FLOOR reject it). That stays true whether on or off:
-# a top tier is never auto-selected (it would bill real $ once off the free promo).
+# Fable is ALSO always excluded from AUTOMATIC routing (no DOCTRINE keyword maps to
+# it; HQ_MODEL_OVERRIDE/HQ_MODEL_FLOOR reject it). A top tier is never auto-selected.
 #
-# TO RE-ENABLE when a new top-tier model ships: set FABLE_ENABLED = True. If the new
-# model has a different name, also update tier_for_model() + the emitted model id /
-# bare alias. See MODEL_ROUTING.md §5.5.
+# TO DISABLE (if Anthropic pulls the model): set FABLE_ENABLED = False —
+# clamp_disabled_tier() bumps explicit fable requests down to Opus.
+# TO UN-METER (if Fable returns to flat-rate): set FABLE_METERED = False — the
+# sentinel gate becomes a no-op, pre-metering behavior restored. One-line rollback.
+# See MODEL_ROUTING.md §5.5.
 FABLE_ENABLED = True  # re-enabled 2026-07-03: Anthropic restored Claude Fable 5 (claude-fable-5)
+FABLE_METERED = True  # metered from ~2026-07-13 ($10/M in, $50/M out; verified 2026-07-12)
+# Consent sentinel (H1 fix, 2026-07-12): the token is `FABLE-OK:<nonce>` where <nonce>
+# is ≥4 alnum/hyphen chars the Commander MINTS PER OPERATOR APPROVAL. A regex (not a bare
+# substring) is required so that PROSE quoting the doctrine — which contains the bare
+# string "FABLE-OK" and the template "FABLE-OK:<nonce>" (angle brackets, unmatchable) —
+# can NEVER self-authorize a dispatch. `<nonce>` in docs has literal `<>` so it won't match.
+FABLE_SENTINEL_PREFIX = "FABLE-OK"  # human-readable name for banners/messages
+FABLE_SENTINEL_RE = re.compile(r"FABLE-OK:([A-Za-z0-9][A-Za-z0-9-]{3,})")
 DISABLED_TIER_FALLBACK = "opus"  # active ceiling a disabled top tier falls back to
 
 TIER_ORDER = {"haiku": 0, "sonnet": 1, "opus": 2, "fable": 3}
@@ -91,7 +110,10 @@ VALID_TIERS = set(TIER_ORDER.keys())
 AUTO_TIERS = {"haiku", "sonnet", "opus"}
 
 # Banner hints — adapt to the on/off state so we never give stale advice.
-FABLE_EXPLICIT_HINT = "Fable is explicit-only; pass model:claude-fable-5 per dispatch (§5.5)."
+FABLE_EXPLICIT_HINT = (
+    "Fable is explicit-only AND metered; pass model:claude-fable-5 per dispatch "
+    "plus a per-approval consent token 'FABLE-OK:<nonce>' in the dispatch prompt (§5.5)."
+)
 FABLE_DISABLED_HINT = (
     "Fable is parked (disabled 2026-06-14) — Opus is the current ceiling; "
     "the slot is reserved for a future above-Opus model (§5.5)."
@@ -104,6 +126,7 @@ FABLE_DISABLED_HINT = (
 HQ_ROOT = Path(os.environ.get("HQ_ROOT", str(Path.home() / "claude-hq")))
 LEDGER_PATH = HQ_ROOT / "run" / "cost-ledger.sqlite"
 LOG_PATH = HQ_ROOT / "scripts" / ".model-router.log"
+NONCE_STORE = HQ_ROOT / "run" / ".fable-nonces"  # consumed consent nonces (single-use, H3)
 
 # --------------------------------------------------------------------------
 # Helpers
@@ -146,6 +169,97 @@ def fable_hint() -> str:
     return FABLE_EXPLICIT_HINT if FABLE_ENABLED else FABLE_DISABLED_HINT
 
 
+def fable_authorized(tool_input: dict) -> str | None:
+    """Return the consent NONCE if the dispatch prompt carries a valid
+    `FABLE-OK:<nonce>` sentinel, else None. The sentinel lives in the PROMPT (a
+    channel only a deliberate caller writes — the harness never auto-fills
+    prompts, whereas a Fable main loop stamps the model field reflexively).
+    The nonce form (not a bare substring) means prose that merely QUOTES the
+    doctrine — which contains bare "FABLE-OK" and the "FABLE-OK:<nonce>" template
+    (unmatchable angle brackets) — cannot self-authorize. Exception-safe."""
+    m = FABLE_SENTINEL_RE.search(str(tool_input.get("prompt") or ""))
+    return m.group(1) if m else None
+
+
+def nonce_already_used(nonce: str) -> bool:
+    """Single-use enforcement (H3): has this consent nonce been consumed before?
+    One operator approval mints one nonce → one dispatch. FAIL-OPEN on a store
+    read error for THIS sub-check only (reuse is a narrow risk — a fresh nonce
+    per approval is minted by the Commander; the primary defence is the
+    unforgeable nonce FORMAT above, and the core deny still fails CLOSED). A read
+    error should not block a legitimate first-use dispatch."""
+    try:
+        if not NONCE_STORE.exists():
+            return False
+        return nonce in NONCE_STORE.read_text().split()
+    except Exception as e:
+        log_debug(f"nonce read failed (treating as unused): {e}")
+        return False
+
+
+def consume_nonce(nonce: str) -> None:
+    """Record a consent nonce as spent. Best-effort; never raises."""
+    try:
+        NONCE_STORE.parent.mkdir(parents=True, exist_ok=True)
+        with NONCE_STORE.open("a") as f:
+            f.write(nonce + "\n")
+    except Exception as e:
+        log_debug(f"nonce write failed: {e}")
+
+
+def coerce_str_field(tool_input: dict, key: str) -> None:
+    """Fail-closed hygiene (C1): coerce a tool_input field to str in place so
+    downstream .strip()/.lower()/regex never crash on a dict/list/number. For the
+    model field this makes fable detection MORE inclusive (str(dict) still
+    contains 'claude-fable-5' → detected → denied), i.e. it errs toward blocking."""
+    v = tool_input.get(key)
+    if v is not None and not isinstance(v, str):
+        try:
+            tool_input[key] = str(v)
+        except Exception:
+            tool_input[key] = ""
+
+
+def raw_fable_unauthorized(hook_input: dict) -> bool:
+    """Exception-safe last-ditch check used by the C1 fail-closed backstop: is
+    this an Agent dispatch that requests metered Fable with no valid consent
+    sentinel and no router-off? If we can't tell, return False (only deny when we
+    can positively identify an unauthorized metered-fable request)."""
+    try:
+        if not isinstance(hook_input, dict):
+            return False
+        if hook_input.get("tool_name") != "Agent":
+            return False
+        if not (FABLE_ENABLED and FABLE_METERED):
+            return False
+        if os.environ.get("HQ_ROUTER_OFF") == "1":
+            return False
+        ti = hook_input.get("tool_input") or {}
+        if not isinstance(ti, dict):
+            return False
+        if tier_for_model(str(ti.get("model") or "").strip()) != "fable":
+            return False
+        return FABLE_SENTINEL_RE.search(str(ti.get("prompt") or "")) is None
+    except Exception:
+        return False
+
+
+def deny_output(reason_detail: str) -> dict:
+    """The single deny payload for an unauthorized metered-fable dispatch."""
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": (
+                f"Fable 5 is METERED ($10/M in, $50/M out) and this dispatch {reason_detail}. "
+                "Either re-dispatch on a subscription tier (model: opus/sonnet/haiku), or get "
+                "operator approval and include a fresh 'FABLE-OK:<nonce>' token in the dispatch "
+                "prompt (MODEL_ROUTING.md §5.5)."
+            ),
+        }
+    }
+
+
 def clamp_disabled_tier(tier: str, reason: str) -> tuple[str, str]:
     """Clamp a disabled top-tier placeholder DOWN to the active ceiling.
 
@@ -180,7 +294,7 @@ def is_anthropic_model(model: str) -> bool:
 
 
 def tier_for_model(model: str) -> str | None:
-    """Extract tier (haiku/sonnet/opus) from a Claude model string.
+    """Extract tier (haiku/sonnet/opus/fable) from a Claude model string.
 
     Substring match. Returns None for non-Claude or unrecognised strings.
     """
@@ -287,15 +401,40 @@ def decide(tool_input: dict) -> tuple[str, str]:
         candidate_tier = tier
         candidate_reason = label
 
+        # 4a. Metered top-tier cap (§5.5, metering 2026-07) — a fable caller tier
+        #     without a valid consent sentinel is capped to opus for the LEDGER's
+        #     chosen_tier, so a denied dispatch is never miscounted as an allowed
+        #     fable run (fable-spend.sh keys ALLOWED on model_chosen='fable'). The
+        #     actual refusal is main()'s deny gate; this cap is bookkeeping + the
+        #     inheritance backstop. No banner here — main() owns all messaging.
+        fable_capped = False
+        if (
+            current_tier == "fable"
+            and FABLE_ENABLED
+            and FABLE_METERED
+            and not fable_authorized(tool_input)
+        ):
+            current_tier = "opus"
+            fable_capped = True
+
         # 4. current_tier_floor — doctrine can escalate above caller's choice,
         #    but never downgrade it. If caller specified a HIGHER tier than
         #    doctrine picked, keep caller's choice.
         if current_tier and TIER_ORDER[current_tier] > TIER_ORDER[candidate_tier]:
-            candidate_reason = (
-                f"current-tier-floor (caller={current_tier}; "
-                f"doctrine wanted {candidate_tier})"
-            )
+            if current_tier == "fable" and FABLE_METERED:
+                candidate_reason = "fable-explicit (FABLE-OK:<nonce>; caller requested fable)"
+            elif fable_capped:
+                candidate_reason = "fable-capped (metered; no FABLE-OK:<nonce>) → opus"
+            else:
+                candidate_reason = (
+                    f"current-tier-floor (caller={current_tier}; "
+                    f"doctrine wanted {candidate_tier})"
+                )
             candidate_tier = current_tier
+        elif fable_capped:
+            # Capped fable landed at/below doctrine's own pick — doctrine tier
+            # stands, but the ledger must still show the cap fired.
+            candidate_reason = f"{candidate_reason}; fable-capped (metered; no FABLE-OK:<nonce>)"
 
     # 5. Hard floor — Opus is the MINIMUM for these agent kinds (§4: refuse all
     #    DOWNgrades). haiku/sonnet are forced UP to opus. An explicit higher tier
@@ -386,9 +525,136 @@ def write_decision(record: dict) -> None:
 # --------------------------------------------------------------------------
 
 
+def _run(hook_input: dict, dry_run: bool) -> int:
+    """Core processing. May raise; main() wraps it with the C1 fail-closed backstop."""
+    if hook_input.get("tool_name", "") != "Agent":
+        return 0
+
+    tool_input = hook_input.get("tool_input") or {}
+    if not isinstance(tool_input, dict):
+        tool_input = {}
+    # C1 fail-closed hygiene: coerce the fields downstream code will
+    # .strip()/.lower()/regex, so a schema-violating dispatch can't crash the
+    # gate into its historical allow-by-default posture. For `model`, coercion
+    # errs toward BLOCKING (str(dict) still contains 'claude-fable-5' → denied).
+    coerce_str_field(tool_input, "model")
+    coerce_str_field(tool_input, "prompt")
+    coerce_str_field(tool_input, "subagent_type")
+
+    session_id = hook_input.get("session_id")
+    cwd = hook_input.get("cwd") or os.getcwd()
+    project = Path(cwd).name
+
+    chosen_tier, reason = decide(tool_input)
+    # Disabled top-tier placeholder (Fable, while FABLE_ENABLED=False) → clamp to Opus.
+    chosen_tier, reason = clamp_disabled_tier(chosen_tier, reason)
+
+    requested = tool_input.get("model")
+    router_off = os.environ.get("HQ_ROUTER_OFF") == "1"
+    subagent_kind = tool_input.get("subagent_type") or "general-purpose"
+    prompt_text = (tool_input.get("prompt") or "").strip().replace("\n", " ")
+    prompt_summary = prompt_text[:120]
+
+    # ---- Metered-fable DENY gate (2026-07-12) -----------------------------
+    # Verified 2026-07-12 (transcript forensics): this Claude Code build does NOT
+    # honor modifyToolInput — a "capped" dispatch would still RUN fable at real
+    # cost. Denying is the only real cap. The router's SINGLE deny case; keyed on
+    # the RAW request so no decide() branch can route around it. Two deny reasons:
+    # no valid FABLE-OK:<nonce> sentinel, or a reused nonce (one approval = one
+    # dispatch). HQ_ROUTER_OFF=1 bypasses (operator's literal choice stands).
+    requested_is_fable = (
+        FABLE_ENABLED and FABLE_METERED and not router_off
+        and tier_for_model((requested or "").strip()) == "fable"
+    )
+    auth_nonce = fable_authorized(tool_input) if requested_is_fable else None
+    deny_detail = None
+    if requested_is_fable:
+        if not auth_nonce:
+            deny_detail = "lacks a valid 'FABLE-OK:<nonce>' consent sentinel"
+        elif nonce_already_used(auth_nonce):
+            deny_detail = "reuses an already-spent FABLE-OK nonce (one approval = one dispatch)"
+
+    if deny_detail is not None:
+        # Loud, unambiguous refusal banner (M1) — not the old "Routed → opus".
+        banner(
+            f"DENIED: metered Fable dispatch — {deny_detail}. Re-dispatch on "
+            "opus/sonnet/haiku, or get operator consent + a fresh FABLE-OK:<nonce> (§5.5)."
+        )
+        if dry_run:
+            banner("(dry-run) preview only — no refusal emitted")
+            return 0
+        # Ledger: model_chosen='opus' (nothing ran as fable) keeps fable-spend.sh's
+        # ALLOWED count (model_chosen='fable') clean; override_reason='fable-denied'
+        # is the DENIED signal for BOTH deny reasons.
+        write_decision({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id, "project": project, "agent_kind": subagent_kind,
+            "task_summary": prompt_summary, "model_requested": requested,
+            "model_chosen": "opus", "override_reason": "fable-denied",
+            "matched_keyword": f"DENIED ({'nonce-reused' if auth_nonce else 'no-sentinel'}); {reason}",
+        })
+        print(json.dumps(deny_output(deny_detail)))
+        return 0
+
+    # ---- ALLOW path -------------------------------------------------------
+    # EFFECTIVE tier (2026-07-12 re-review MEDIUM fix): an authorized fable
+    # request (valid unused sentinel) that we're allowing WILL run Fable at
+    # runtime, because the honored control is the explicit `model:` param — even
+    # if decide() picked a lower tier (e.g. HQ_MODEL_OVERRIDE=opus makes
+    # chosen_tier=opus). So the money-path mechanisms — metered cost banner,
+    # nonce consumption (single-use), and the ledger's model_chosen — key on the
+    # REQUEST being an allowed fable dispatch, NOT on decide()'s chosen_tier.
+    # Otherwise an override would silently: not spend the nonce (reuse), log
+    # 'opus', and hide the spend from fable-spend.sh, while Fable really billed.
+    allowed_fable = requested_is_fable and auth_nonce is not None
+    effective_tier = "fable" if allowed_fable else chosen_tier
+
+    if effective_tier == "fable" and FABLE_METERED:
+        banner(
+            "METERED DISPATCH: Fable 5 bills $10/M input, $50/M output — "
+            "keep the brief curated (soft cap ~30k input tokens ≈ $0.30)."
+        )
+    if requested and normalise_tier(requested) != effective_tier:
+        banner(f"Routed {subagent_kind} → {effective_tier} ({reason}; caller asked for {requested})")
+    else:
+        banner(f"Routed {subagent_kind} → {effective_tier} ({reason})")
+
+    if dry_run:
+        return 0
+
+    # Spend the consent nonce for any ALLOWED authorized fable dispatch (H3),
+    # regardless of what decide() picked.
+    if allowed_fable and auth_nonce is not None:
+        consume_nonce(auth_nonce)
+
+    write_decision({
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "session_id": session_id, "project": project, "agent_kind": subagent_kind,
+        "task_summary": prompt_summary, "model_requested": requested,
+        "model_chosen": effective_tier, "override_reason": reason.split(" (", 1)[0],
+        "matched_keyword": reason,
+    })
+
+    output: dict = {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "permissionDecisionReason": f"routed → {effective_tier} ({reason})",
+        }
+    }
+    # Best-effort tool_input override for newer Claude Code versions. VERIFIED
+    # 2026-07-12: the current build IGNORES this field — real tiering requires an
+    # explicit `model:` param on the dispatch. Kept for forward-compatibility.
+    # Never emit an override for an allowed fable run (it would contradict the
+    # honored explicit param, and is ignored anyway).
+    if not allowed_fable and normalise_tier(requested) != chosen_tier:
+        output["modifyToolInput"] = {"model": chosen_tier}
+    print(json.dumps(output))
+    return 0
+
+
 def main() -> int:
     dry_run = os.environ.get("HQ_DRY_RUN") == "1"
-
     try:
         raw = sys.stdin.read()
         if not raw.strip():
@@ -398,64 +664,25 @@ def main() -> int:
     except Exception as e:
         log_debug(f"parse error: {e}")
         return 0
-
-    tool_name = hook_input.get("tool_name", "")
-    if tool_name != "Agent":
+    if not isinstance(hook_input, dict):
+        log_debug("hook_input not an object; no-op")
         return 0
 
-    tool_input = hook_input.get("tool_input", {}) or {}
-    session_id = hook_input.get("session_id")
-    cwd = hook_input.get("cwd") or os.getcwd()
-    project = Path(cwd).name
-
-    chosen_tier, reason = decide(tool_input)
-    # Disabled top-tier placeholder (Fable, while FABLE_ENABLED=False) → clamp to Opus.
-    chosen_tier, reason = clamp_disabled_tier(chosen_tier, reason)
-    requested = tool_input.get("model")
-    subagent_kind = tool_input.get("subagent_type") or "general-purpose"
-    prompt_text = (tool_input.get("prompt") or "").strip().replace("\n", " ")
-    prompt_summary = prompt_text[:120]
-
-    # Transparency banner — always prints
-    if requested and normalise_tier(requested) != chosen_tier:
-        banner(
-            f"Routed {subagent_kind} → {chosen_tier} "
-            f"({reason}; caller asked for {requested})"
-        )
-    else:
-        banner(f"Routed {subagent_kind} → {chosen_tier} ({reason})")
-
-    if dry_run:
-        # Don't log, don't emit hook output — preview only
+    try:
+        return _run(hook_input, dry_run)
+    except Exception as e:
+        # C1 fail-closed backstop: a crash must never silently ALLOW an
+        # unauthorized metered-fable dispatch. On any error, if this is
+        # positively an unauthorized metered-fable Agent dispatch → DENY; else
+        # fall through to allow (don't block normal work on a router bug).
+        log_debug(f"router crashed in _run: {e}")
+        try:
+            if not dry_run and raw_fable_unauthorized(hook_input):
+                banner("DENIED (fail-closed): router error on an unauthorized metered-fable dispatch.")
+                print(json.dumps(deny_output("could not be verified due to a router error")))
+        except Exception as e2:
+            log_debug(f"fail-closed backstop also failed: {e2}")
         return 0
-
-    # Log decision
-    write_decision({
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "session_id": session_id,
-        "project": project,
-        "agent_kind": subagent_kind,
-        "task_summary": prompt_summary,
-        "model_requested": requested,
-        "model_chosen": chosen_tier,
-        "override_reason": reason.split(" (", 1)[0],
-        "matched_keyword": reason,
-    })
-
-    # Hook output — allow + (forward-compatible) modifyToolInput
-    output: dict = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-            "permissionDecisionReason": f"routed → {chosen_tier} ({reason})",
-        }
-    }
-    # Best-effort tool_input override for newer Claude Code versions
-    if normalise_tier(requested) != chosen_tier:
-        output["modifyToolInput"] = {"model": chosen_tier}
-
-    print(json.dumps(output))
-    return 0
 
 
 if __name__ == "__main__":

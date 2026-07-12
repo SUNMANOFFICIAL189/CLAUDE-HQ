@@ -1422,7 +1422,9 @@ Both `www.flightclub33.com` and apex `flightclub33.com` currently serve the Clou
 
 ---
 
-## [Open] — 2026-06-14 — model-router.py: tier_for_model() docstring omits 'fable'
+## [Done 2026-07-12] — 2026-06-14 — model-router.py: tier_for_model() docstring omits 'fable'
+
+**Closed:** docstring fixed as part of the FABLE_METERED / FABLE-OK sentinel change (Fable metering transition build, 2026-07-12).
 
 **What:** `scripts/lib/model-router.py` — `tier_for_model()` docstring says "Extract tier (haiku/sonnet/opus)…" but the function also returns `"fable"`. Update the docstring to list fable.
 
@@ -1582,3 +1584,84 @@ From the final `/proof-check` of the fixes (2026-07-06, all fail-closed/latent, 
 - **create_bid_job validates profile_id but not source_object_key (Phase 2).** Not a regression (no upload surface exists yet). When the R2 upload layout lands, enforce a per-tenant key prefix (`p_source_object_key like uid || '/%'`) inside the RPC so a client can't point a job at another tenant's uploaded PDF.
 
 Provenance: 2026-07-06 — BidFill Phase 1 output gate + final /proof-check. Repo `~/projects/bidfill`; detail in its `MISSION_BOARD.md` checkpoint 2026-07-06 + `HANDOFF.md`.
+
+## 2026-07-07 — BidFill Phase-2 task 2.5 deferrals (from the Fable-5 gate)
+- **below_rule (label-above-blank) needs a blank-OWNERSHIP model before it can auto-ink.** A 2.5 attempt with a "closest-label" guard was reverted: the 3-lens Fable-5 gate reproduced 3 e2e wrong-ink holes (multi-column rows merge into one Line → neighbour's blank claimed; owner label left of the rule / `By: ___` signature underline invisible; real underscore blank skipped as ignorable). Root cause: the resolver has no column model, so "nearest ROW above" ≠ "the LABEL that OWNS the rule". Dedicated task: build column/ownership segmentation (recommended safe restriction: fire ONLY for a standalone-label row + same-row-owner rejection + label-token-span overlap + occupied-nearest hard-stop), each guard with a fails-without-it test, then re-gate. Spec = the 3 lens outputs + scratchpad phase2_4_engine_gate_findings.md. below_rule stays review-only until then.
+- **Rotation: /Rotate=180 is a safe, cheap recovery win left on the table.** 90/270 break the resolver (transpose), but 180 keeps text horizontal so the resolver works; needs the visual→media position transform (x'=W−x, y'=H−y) + glyphs drawn rotated 180° + tests. 90/270 need orientation normalization ahead of the WHOLE pipeline (transfer_rotation_to_content broke pdfplumber extraction — needs a different normalizer).
+- **DB-layer profile schema hygiene:** `create_profile`/`create_profile_version` RPCs accept raw jsonb with no schema check, so a direct PostgREST caller could store keys past the app-layer zod strip. Not a fill-engine safety hole (no worker code consumes an entity discriminator), but tighten if/when a `business_structure` enum is added, or the entity-section resolver could later read a smuggled key.
+- **Inherited /Rotate test coverage:** rotated-page tests use page-level `page.rotate()`; add a fixture with tree-inherited /Rotate to pin `rotated_pages` against a pypdf upgrade (mechanism verified sound per pypdf 6.14.2 source).
+- **OPERATOR DECISION (BidFill):** to auto-fill mutually-exclusive entity sections ("If a corporation…/If a partnership…"), the profile schema needs a `business_structure` enum (corporation/partnership/sole_prop/llc/joint_venture) — a web-app change (schema + onboarding wizard). Until then exclusive sections correctly demote to review.
+
+## 2026-07-09 — HUES strategy deck image polish (from adversarial-review, LOW/MED deferred)
+Deck: /Volumes/Elements/My_Stuff/OFFLIMITS/_CLIENTS/HUES/deck/hues-deck.html
+- [ ] Cover-right meta ("Prepared by Offlimits · 2026") low-contrast (~0.73 lum) — no scrim in .titletake .box. Consider subtle bottom scrim or crop nudge.
+- [ ] P7a `p7a-field.avif` is the only AVIF in an otherwise JPG/PNG deck — re-encode to JPG for non-Chromium export robustness.
+- [ ] Cover `cover-hero.jpg` is 4.17 MB (4000×6000) shown ≤1880px — downscale to ~2000px wide.
+- [ ] P4 `p4-audience.jpg` low-res (474×594, ~1.48× upscale) — swap for ≥1000px source if available.
+- [ ] Stale HTML comments still say "placeholder/to be supplied" (hues-deck.html ~L37,102-103,338-339,367) — doc drift, tidy when convenient.
+
+---
+
+## [Parked] — 2026-07-10 — PATS (Polymarket bot) — parked; superseded by QUANTUM
+
+**What:** PATS-Copy (the Polymarket copy/geo/StarMaster trading bot) is formally PARKED as of 2026-07-10, by operator decision during QUANTUM Phase-0 scope-lock. No PATS *code* is imported into QUANTUM; only its *lessons* carry over (encoded as QUANTUM design requirements: fills-only accounting, no fabricated exits, isolated per-strategy pools, honest gates). This entry is the single durable record of the park.
+
+**Why:** Verified across multiple deep dives (verdicts 2026-06-28 and 2026-07-03): the headline dashboard P&L was a **fabricated-exit-price artifact**; honest realized performance is **lifetime-negative**; there is **no validated edge**; bot is **paper-only, $0 real capital**. QUANTUM's explicit purpose is to STOP serial-edge-chasing (Master Plan risk #6), which forces an explicit disposition on every open trading effort rather than leaving them to accrete. Parking (not closing) keeps the artifacts recoverable without keeping it as an active drain on attention.
+
+**State at park:** paper-only, $0 real; nothing running (no processes/daemons for it in this context); code LIVE @74b8bc3; signal idle, copy disabled; geo/StarMaster were the only live traders. Rectification plan + resume anchor already exist.
+
+**Revisit trigger (any one):** (a) QUANTUM's honest test rig proves out — i.e. a strategy clears the ETF benchmark in the Phase-3 tournament and the operator wants to reconsider a Polymarket strand; OR (b) trading capital ≥ £25k; OR (c) a materially new, *verified* edge hypothesis specific to Polymarket/prediction-markets appears (routed through QUANTUM's hypothesis registry + Lesson-25 battery, never resurrected on vibes).
+
+**How to resume:** read memory `project_pats_rectification_handoff.md` (RESUME ANCHOR) → plan `~/.claude/plans/joyful-singing-dusk.md`. Do NOT restart trading without re-running the ctdd-precheck + the no-edge verdict review first.
+
+**Provenance:** 2026-07-10 — operator decision (AskUserQuestion: "Park with revisit date") during QUANTUM Phase-0 scope-lock. Cross-ref: `~/projects/trading/MISSION_BOARD.md` (P0.7), QUANTUM Master Plan finding M7 (PATS disposition gate).
+
+## 2026-07-11 — Content-engine proof-check findings (MED/LOW; HIGH handled separately)
+Source: /proof-check on the strategy re-grade (v1.1/v1.2) + BUILD_TIMELINE.md. HIGH (RESEARCH_FINDINGS.md:109,154 unflagged fabrications) surfaced to operator, NOT filed here (gate-blocking).
+- [MED] Kill criterion unfalsifiable: P5 "beat the manual baseline" but no manual baseline was measured. Capture time-to-deliverable + client-acceptance rate BEFORE P3, else the kill gate can't fire.
+- [MED] Re-grade over-stamp: Buffer numbers (+109% carousel / +36% Reels reach / +21% reply lift) carry [verified 2026-07-11] but rest on a single Lane-8 subagent read; refutation pass died on spend limit. Re-fetch Buffer on limit reset OR soften stamp to [single-source, unrefuted].
+- [MED] Brand-system lock (HUES redesign, operator-owned, still pending) is the TRUE critical path for P3 but plan lists it only as a dependency. Promote to an explicit dated P2-parallel milestone.
+- [LOW] Cross-file inconsistency: TikTok "70% completion" flagged in manuscript §5 but stated plainly in STRATEGY_FINDINGS §3.2 + §1.2.
+- [LOW] CONTENT_CRAFT.md:34 + repurposing-orchestrator SKILL.md:50,68 use "30-90s" as craft/format guidance (now permitted) — add a one-line note so it's not mistaken for the discredited ranking claim.
+- [LOW] 8-week timeline has zero slack buffer; any operator-input slip cascades to the September date.
+- [LOW] "£0 until P2" framing omits that the build consumes Claude quota (limit already hit this session).
+
+---
+
+## [Open] — 2026-07-12 — trust-gate-post.sh: post-clone scan misses clones with explicit destination paths
+
+**What:** `PostToolUse` scanner logged `post-scan: could not locate cloned dir (cwd=..., cmd=... git clone ... ~/claude-hq/repos/ponytail)` for BOTH evaluation clones on 2026-07-12 — Magika + secret-scan were silently SKIPPED. The dir-locator only handles `git clone <url>` into cwd (derives dir from repo name); it fails on an explicit destination arg and on `~` expansion.
+
+**Why:** Defence-in-depth gap: any clone with a destination path (the standard HQ pattern — `~/claude-hq/repos/<name>`) gets NO automatic post-scan. The 2026-07-12 evals ran the scans manually, but ambient Tier B should not depend on remembering.
+
+**Estimate:** 30–60 minutes (tokenise the command with the same shlex parser trust-gate.sh already uses — Lesson 7 — take the last non-flag arg as destination, expand `~`, fall back to repo-name-in-cwd).
+
+**How to start:** `~/claude-hq/scripts/trust-gate-post.sh` — find the dir-location logic; reuse `parse_git_clone_url`'s tokeniser; add a test with an explicit-dest clone.
+
+**Acceptance:** A `git clone <url> ~/claude-hq/repos/x` command triggers an automatic Magika + secret-scan of `~/claude-hq/repos/x`, visible in `.trust-gate.log`.
+
+---
+
+## [Open] — 2026-07-12 — Fable metering review follow-ups (5 MEDIUM + 8 LOW from the proof-gate)
+
+**What:** The 2026-07-12 adversarial review of the Fable-metering build passed CRITICAL/HIGH to the operator (fix-before-ship) and filed the rest here. Full detail with file:line in `docs/reviews/adversarial-review-2026-07-12-fable-metering.md`. MEDIUM: M1 real-deny stderr banner never says DENIED; M2 protected-universe gaps (ANTHROPIC_MODEL/--model/project-settings session model uncovered by the session-start warn; inheritance blind spot; MCP/Bash sessions) — document as accepted-uncovered + add hq-foreman rail; M3 fable-spend.sh day-boundary over-count (`WHERE datetime(ts) >= …` fix verified); M4 MODEL_ROUTING header/§1/§3/§4 still say "automatic enforcement"/stale §4 "preserved"; M5 state plainly that the sentinel is an intent signal, not verified consent. LOW: L1 spend-estimate understates big briefs + noisy empty-ledger errors; L2 gpt-fable over-block + banner/JSON mismatch; L3 COMMANDER SSOT pointers + stale opusplan tip; L4 model-router.sh "never blocks" comment; L5 retry-table "top tier" ambiguity; L6 space-form /route refs; L7 route-fable allowed-tools brittleness; L8 own-verifier vs /proof-check guidance line.
+
+**Why:** LOW/MEDIUM per /proof-check triage — do not block proceeding, must not be lost.
+
+**Estimate:** 1-2 hours batched.
+
+**How to start:** Work through the review doc's M/L sections; most are one-line doc/wording fixes; M3 is a verified one-word SQL fix.
+
+**Acceptance:** Each M/L item either fixed (with file:line) or explicitly accepted-uncovered in MODEL_ROUTING.md; review doc annotated.
+
+---
+
+## [Open] — 2026-07-12 — Fable deny-gate residual LOWs (from the re-review, defense-in-depth)
+
+**What:** The 2026-07-12 re-review of the hardened deny gate confirmed all fixes hold and cleared the gate; these three LOWs are accepted-as-documented, none reachable via model-controlled tool_input: (1) nonce single-use is TOCTOU — `nonce_already_used` reads then `consume_nonce` appends with no lock; two concurrent identical-nonce dispatches could both pass (bounded to a deliberate simultaneous double-dispatch of ONE nonce). (2) the C1 fail-closed backstop checks sentinel PRESENCE only, not reuse, and doesn't consume on the crash-allow path (a forced crash with a reused-but-present nonce would fall through to allow) — crash vector is non-model-controllable (`cwd`). (3) nonce-store read-error fails OPEN for the reuse sub-check only (the core no-sentinel deny still fails closed) — store path not model-controllable. Also: `docs/reviews/...:22` proposes a space-form `FABLE-OK <nonce>` where the shipped form is colon `FABLE-OK:<nonce>` (historical review artifact, non-authoritative).
+
+**Why:** Hardening completeness, not active risk. The unforgeable nonce FORMAT is the primary defence; these are secondary layers.
+
+**Estimate:** 30–45 min if ever prioritised (file-lock or atomic O_APPEND+dedup for the race; add reuse-check to the backstop).
+
+**Acceptance:** Concurrent identical-nonce double-dispatch cannot double-spend; backstop denies a reused nonce on crash.

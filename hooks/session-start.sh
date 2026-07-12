@@ -7,6 +7,15 @@ HINDSIGHT_URL="${HINDSIGHT_URL:-http://localhost:8888}"
 echo "## Live Context (auto-injected)"
 echo ""
 
+# --- Metered-model guard: warn if the default session model bills per-token ---
+# Fable 5 left Max flat-rate coverage ~2026-07-13 ($10/M in, $50/M out). MODEL_ROUTING.md §5.5.
+SETTINGS_MODEL=$(grep -o '"model"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json" 2>/dev/null | head -1)
+if echo "$SETTINGS_MODEL" | grep -qi "fable"; then
+  echo "### ⚠️ METERED MODEL WARNING"
+  echo "Your default session model is Fable 5, which bills per-token (\$10/M in, \$50/M out) — not covered by the Max subscription. Unless this is deliberate, switch with /model to Opus 4.8. Doctrine: commander/MODEL_ROUTING.md §5.5."
+  echo ""
+fi
+
 # --- Layer 3: Git context ---
 if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
   echo "### Git Status"

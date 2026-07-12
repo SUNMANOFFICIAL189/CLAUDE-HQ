@@ -108,6 +108,12 @@ STEP 2: CLASSIFY TASK
 └── Any credentials needed? (API keys — list them now, resolve in Step 4)
 
 STEP 3: DECOMPOSE
+├── Non-trivial decompositions MAY use ONE consent-gated Fable 5 planning dispatch —
+│   invoke the `hq-foreman` skill (loads on-demand; do NOT eager-read). Fable is
+│   METERED ($10/$50 per MTok): propose with cost estimate, wait for operator yes,
+│   dispatch with model:claude-fable-5 + a fresh single-use FABLE-OK:<nonce> consent
+│   token in the prompt (one yes = one nonce = one dispatch). Execution tickets always
+│   carry EXPLICIT model: params (router cannot modify models — verified 2026-07-12).
 ├── Break task into sub-problems (not a flat list — a DAG with dependencies)
 ├── For each sub-problem:
 │   ├── Which tool/skill/agent handles it?
