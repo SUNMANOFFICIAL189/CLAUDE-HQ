@@ -1665,3 +1665,15 @@ Source: /proof-check on the strategy re-grade (v1.1/v1.2) + BUILD_TIMELINE.md. H
 **Estimate:** 30–45 min if ever prioritised (file-lock or atomic O_APPEND+dedup for the race; add reuse-check to the backstop).
 
 **Acceptance:** Concurrent identical-nonce double-dispatch cannot double-spend; backstop denies a reused nonce on crash.
+
+---
+
+## [Open] — 2026-07-12 — /sync STEP 8: reconcile global COMMAND symlinks, not just skills
+
+**What:** Global slash-commands are surfaced via manual symlinks in `~/.claude/commands/` → `~/claude-hq/commands/*` (scout, skill-audit, and now route-fable/route-preview/route-table). The `/sync` skill STEP 8 reconciles `~/claude-hq/skills/*` → `~/.claude/skills/` but does NOT touch commands, so on a fresh-machine re-clone the command symlinks need manual recreation. Not a regression (consistent with how scout/skill-audit have always been) — a durability nicety surfaced by the 2026-07-12 route-* globalization adversarial review.
+
+**Why:** Reproducibility — the live wiring should be recreatable by `/sync`, not hand-made.
+
+**Estimate:** 20 min — mirror STEP 8's skill loop for `~/claude-hq/commands/*` → `~/.claude/commands/<name>` (non-destructive: create if missing, report non-symlink conflicts, never delete orphans).
+
+**Acceptance:** Running `/sync` in claude-hq recreates any missing `~/.claude/commands/route-*` (+ scout/skill-audit) symlinks and reports conflicts without deleting anything.
