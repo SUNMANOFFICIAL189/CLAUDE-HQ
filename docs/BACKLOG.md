@@ -1677,3 +1677,95 @@ Source: /proof-check on the strategy re-grade (v1.1/v1.2) + BUILD_TIMELINE.md. H
 **Estimate:** 20 min — mirror STEP 8's skill loop for `~/claude-hq/commands/*` → `~/.claude/commands/<name>` (non-destructive: create if missing, report non-symlink conflicts, never delete orphans).
 
 **Acceptance:** Running `/sync` in claude-hq recreates any missing `~/.claude/commands/route-*` (+ scout/skill-audit) symlinks and reports conflicts without deleting anything.
+
+---
+
+## [Open] — 2026-07-13 — insta-notion-sync: retry `[retry N]` counter is clobbered → cap is soft
+
+**What:** In `~/projects/insta-notion-sync`, `mark_failed()` (src/notion_client.py:322) overwrites the Error field on every failure, wiping the `[retry N]` suffix that `retry_old_failures()` parses to enforce `max_retries=3`. So the retry cap never triggers — failed rows retry indefinitely after each cooldown. Surfaced by the 2026-07-13 adversarial review (secondary to the HIGH stranded-rows fix, which was shipped: retry now falls back to last_edited_time). Accepted for now because rows only reach `failed` for transient reasons (permanent cases — photo/unavailable/too-long/private — already `mark_skipped`), so uncapped retry of a transient failure is desirable, not harmful; only a genuinely-permanent non-auth error (e.g. an operator-saved malformed URL) would churn ~1 no-network call/hour.
+
+**Why:** Bounded correctness — the cap exists for a reason; churn on a permanently-bad row is wasteful even if cheap.
+
+**Estimate:** 30 min — make `mark_failed` preserve an existing `[retry N]` from the row's current Error (one extra read), OR track attempts in a dedicated field/property instead of parsing the Error text.
+
+**How to start:** src/notion_client.py `mark_failed` (:322) + `retry_old_failures` (:104). Decide: preserve-suffix vs dedicated attempts column.
+
+**Acceptance:** A row that fails N times is not reset once N ≥ max_retries; verified by a small unit test with synthetic page dicts (no live Notion needed if the counter logic is extracted).
+
+---
+
+## [Open] — 2026-07-13 — Compact the auto-memory MEMORY.md index (approaching read limit)
+
+**What:** `~/.claude/projects/-Users-sunil-rajput/memory/MEMORY.md` is ~20.6KB, approaching the 24.4KB read limit (hook warns at ~17.1KB target). ~70 one-line pointer entries. Needs a deliberate compaction pass: keep one short hook per entry, ensure all detail lives in the topic files (not the index), and merge/drop genuinely superseded entries (e.g. multiple PATS health-check/handoff notes could collapse to the latest + an archive pointer; repo-eval entries that reached a terminal verdict could shorten).
+
+**Why:** Once MEMORY.md exceeds the read limit, session-start memory recall degrades (the index is the always-loaded tier). But dropping/merging entries is lossy and needs care — must not silently lose a pointer the operator still relies on, so it should be done deliberately with operator awareness, not reactively by a hook mid-task.
+
+**Estimate:** 45–60 min — read the index, cluster entries by project, for each cluster confirm the topic file holds the detail, then trim the index line to a one-line hook; propose any merges/drops to the operator before deleting.
+
+**How to start:** `wc -c MEMORY.md`; group by project prefix; identify superseded sets (PATS handoffs, session-handoff dates, closed repo-evals). Trim in place; NEVER delete a topic file, only shorten/merge its index pointer.
+
+**Acceptance:** MEMORY.md < 17.1KB, every remaining entry is a single hook line with detail in its topic file, and no project lost its pointer (operator signed off on any merges/drops).
+
+---
+
+## [Open] — 2026-07-13 — OFFLIMITS INTEL ENGINE: open design items to resolve at EP9/EP11 kickoff
+
+**What:** Four design items recorded by the pre-approval adversarial review of the INTEL ENGINE extension block (`/Volumes/Elements/My_Stuff/OFFLIMITS/_METHOD/ENGINE/BUILD_PLAN.md`, "EXTENSION BLOCK: INTEL ENGINE"): (1) graft-routing map — claim-type → target doctrine surface → consumer, and verify EP4's read-set covers every graft surface once EP4 exists (a graft to a file its consumer does not read is a silent no-op); (2) quarantine read-guard — machine-readable DO-NOT-SURFACE header + lint on `_METHOD/INTEL/` entries, or home the quarantine outside the doctrine tree (verified: no consumer globs `_METHOD/` today; convention is the only guard); (3) EP10 must call the existing competitor-teardown §3.1 hook-classification path, not reimplement it; (4) retention policy for named-practitioner verbatim transcripts/dossiers. Context: intel engine is designed + sequenced post-EP8 (operator decision 2026-07-13), nothing built yet.
+
+**Why:** These were MEDIUM/LOW findings from the gated design review; not blocking the doc-only step, but each becomes load-bearing the moment EP9-EP11 build. Filing here so they cannot silently vanish between now and EP9 kickoff.
+
+**Estimate:** Resolved as part of EP9/EP11 kickoff design tickets (each is a bounded design decision, ~30-60 min inside those tickets, not standalone work).
+
+**How to start:** At EP9 kickoff, read the extension block's "Open items" list + the gate record in `~/.claude/plans/tidy-sprouting-frog.md`; fold each item into the corresponding EP9/EP10/EP11 ticket's MUST-DO.
+
+**Acceptance:** Each of the four items is either implemented or explicitly decided-against in the EP9/EP11 ticket evidence; none remains unaddressed when EP11's promotion gate goes live.
+
+---
+
+## [Open] — 2026-07-13 — OFFLIMITS EP3 scoring gate: two deferred design items
+
+**What:** (1) Newsletter/relationship-platform scoring (EP3 design OQ-9): v1 machine-scores only the 4 IG formats; newsletter assets route to human review, explicitly labelled UNSCORED. Build a lightweight text-only voice+objective check when a real client ships newsletters (PG pilot is IG+IG, unaffected). (2) Carousel slide-to-caption coherence via DeepEval's image-coherence metric (OQ-10): v1 uses critic judgment (£0); DeepEval adoption needs Trust Gate Tier-C first. Design: `_METHOD/ENGINE/design/EP3_SCORING_GATE.md` §10.
+
+**Why:** Both are real capability gaps deferred deliberately (cost-first, pilot-scope); filing so they resurface when a client's platform mix or carousel volume makes them load-bearing.
+
+**Estimate:** (1) ~1 day inside a later EP3 iteration; (2) Trust Gate review + integration, ~1 day.
+
+**How to start:** Read EP3_SCORING_GATE.md OQ-9/OQ-10 + the rubric templates; for (2) run /scout + Trust Gate on DeepEval first.
+
+**Acceptance:** (1) newsletter assets get a machine pre-check before human review; (2) C3 scored with tool-assist or explicitly decided-against.
+
+---
+
+## [Open] — 2026-07-13 — OFFLIMITS EP5: JSONL append ledgers not tmp+rename atomic (LOW)
+
+**What:** `_METHOD/ENGINE/production/cogs.py:113` (append_ledger_row), `review_queue.py:34` (_append), `runner.py:121` (_write_unresolved_refusal) use plain `open(path,"a")`+write, unlike the manifest/asset writers which use tmp+os.replace. A hard crash mid-write-syscall could leave a torn final JSONL line; the next `read_ledger`/`read` raises JSONDecodeError = fail-CLOSED (blocks that client until fixed), not fail-open. Flagged by the EP5+voice blind review (2026-07-13) as acceptable-but-hardenable.
+
+**Why:** The COGS ledger is the money-audit record; a torn line blocks the client. Single-process/single-threaded appends are atomic under normal op, so real-world risk is low, but an fsync + skip-malformed-line-on-read pass would harden the money ledger specifically.
+
+**Estimate:** 30-45 min — add fsync after the ledger append; on read, skip+warn a trailing malformed line rather than raising.
+
+**How to start:** cogs.py append_ledger_row + read_ledger; decide fsync vs tmp+rename-per-append (tmp+rename loses append efficiency; fsync is the lighter fix).
+
+**Acceptance:** a simulated torn final line in COGS_LEDGER.jsonl is skipped-with-warning on read, not fatal; append fsyncs.
+
+---
+
+## [Open] — 2026-07-14 — OFFLIMITS content engine: TIER-2 build-audit findings (1 HIGH must-fix-before-LIVE + 2 MED + 4 LOW)
+
+**Source:** the 2026-07-14 BUILD AUDIT Tier-2 adversarial review (fresh Opus agent, money path + scoring gate). Full record: `_METHOD/ENGINE/reviews/BUILD_AUDIT_2026-07-14.md`. ALL findings are LIVE-mode / hardening only — the offline core loop verdict is GREEN and unaffected (dry-run cannot spend; scoring backstopped by package.py in the runner path). Nothing was auto-fixed (proof-check discipline).
+
+**★ H-1 (HIGH — MUST FIX BEFORE THE FIRST LIVE CYCLE):** a halted LIVE attempt's already-incurred Higgsfield spend is dropped from `COGS_LEDGER.jsonl`, so the monthly cap (which sums the ledger) can be exceeded across operator-cleared over-ceiling cycles. `production/runner.py:529-548` returns `EXIT_HALTED` after only a 0-credit `write_halt`, before `write_cost_record`/`evaluate_and_record` at 560-564. Verified repro: monthly cap 60, two cycles × 40-credit ceiling, each attempt really cost 50 → 100 real credits spent, ledger MTD = 0. `test_h1` actually encodes the buggy behavior ("the 50 must never be metered"), which is why 290 green tests missed it. Compounded by a halt message that frames already-spent credits as prospective ("would reach/exceed"). **Fix:** meter the true cost record FIRST, then halt; reword the halt to say the credits were already spent; update `test_h1` to assert the halted spend IS recorded.
+
+**M-1 (MEDIUM):** the production spend gate (`production_gate.py:115`) accepts on `verdict == "CLEARED-TO-PRODUCE"` alone and ignores the validator's `judgment_required`/`unresolved_judgment_count` (the fixture returns CLEARED with `judgment_required: true, count 5`), contradicting `validate_engine.py:292-296` which made those machine-visible precisely so a spend-gating caller wouldn't treat CLEARED as fully cleared without a human-judgment pass. Compensating control: operator-signed strategy-approval + per-cycle CREDIT_AUTH are still required. **Fix:** refuse (or require explicit override) when `judgment_required` is true.
+
+**M-2 (MEDIUM):** the scoring gate detects but does not CAP the verdict on reel-length (R4, non-hard-gate) or carousel-slide-count; a 120s reel scored directly via `score.py` → PASS exit 0. Backstopped by `package.py:96-122` assembly enforcement (the runner path always hits it), so not exploitable in the current runner path — a single-point-of-enforcement fragility. **Fix:** make R4 + slide-count real hard-gates, or clamp to REVISE on a failed shape check inside `score.py`.
+
+**LOW:** (1) rollup readers `.get("higgsfield_credits_actual", 0)` at `cost_schema.py:109,121` — H2-sibling, not exploitable today; prefer strict read. (2) `subprocess.run(score.py)` has no `timeout` (`runner.py:397,567`) — a hang hangs the runner; add bounded timeout → GATE-CRASH. (3) live 3-attempt budget caller-supplied (`--attempt`), not cross-checked vs `package.next_attempt_number` — REVISE→REJECT dodgeable by resubmitting attempt-1 (no PASS/spend leak). (4) dual YAML parser divergence risk on non-PyYAML hosts.
+
+**Why:** LIVE money-path integrity + audit faithfulness. H-1 is the money-audit ledger under-counting REAL spend and a porous monthly backstop — it must be closed before any real Higgsfield spend. The rest are hardening.
+
+**Estimate:** H-1 ~1-2h (re-order meter-before-halt + reword + fix test). M-1 ~30min. M-2 ~1h. LOWs ~1-2h batched.
+
+**How to start:** Read `_METHOD/ENGINE/reviews/BUILD_AUDIT_2026-07-14.md` Tier-2 section; fix H-1 + M-1 before enabling `--live`; re-run `/proof-check` on the money path after (catches fix-introduced regressions).
+
+**Acceptance:** a halted live attempt's true cost lands in COGS_LEDGER (monthly cap can no longer be exceeded across cycles); the spend gate refuses/flags `judgment_required`; `/proof-check` on the money path is clean before the first live cycle.
