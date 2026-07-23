@@ -899,3 +899,46 @@
   2. The artifact must be the THING: a verbatim current-value quote, a grep command with enumerated synonyms + raw hits, the memory FILE body — not a paraphrase or an index line. Shallow artifacts are the gaming surface; verbatim requirements defeat "cite without reading" by construction.
   3. Multi-agent analysis of an existing system: ONE shared grounding pass by the orchestrator, feed agents the current controls + "net-new vs existing only" — don't let N agents re-derive and re-propose what's already built.
   4. **The only mechanism that GUARANTEES it fires even when skipped is the transcript watchdog** (BACKLOG 2026-06-27, cross-ref Lesson 27.10) — doctrine + the hardened gate reduce the skip rate; only an after-the-fact transcript scan catches the skip itself. Until that ships, this rule + Step 0 are the enforcement and they depend on me actually invoking ctdd-precheck.
+
+### 29. A ruling is embedded only when the old-spec sweep returns empty; patch scripts must assert-and-verify
+- **Rule:** (a) When doctrine changes (a register, a style rule, a spec value), the change is NOT
+  "embedded" after editing the obvious sections — run a grep sweep for the OLD spec's distinctive
+  terms across every doc that could teach it, and reconcile until the sweep returns empty (excluding
+  lines that quote the old spec as banned/retired). (b) Any scripted find-replace edit must ASSERT the
+  anchor matched and verify the result — `str.replace` silently no-ops on a missed anchor, and a
+  script that prints "OK" unconditionally ships a fake success.
+- **Why:** 2026-07-21, OFFLIMITS/Pickle Garden — twice in one day a ruling was applied as surgical
+  edits and adversarial review found the old doctrine still live elsewhere (the voice recalibration
+  left ~17 old-register loci across 9 docs including the voice guide's own vocabulary list; the
+  overlay rulings left BRAND_SYSTEM §3/§5 asserting the superseded spec). Separately, a patch script
+  "fixed" a Class-C constants line, printed OK, and had matched nothing — caught only by a later
+  re-grep. All three were caught by gates, none by the author at write time.
+- **How to apply:** doctrine edit → enumerate the old spec's distinctive strings → `grep -rn` the
+  candidate tree → reconcile every live hit → re-sweep to empty → only then claim "embedded".
+  Patch scripts: `assert old in s` before replace, grep the file after write, and never print
+  success unconditionally. Pairs with Lessons 26 (verify-then-state) and 28 (open the file).
+
+### 30. A resumed sealed writer regresses main-thread fixes — it writes from its transcript, not the disk
+- **Rule:** When a sealed/subagent WRITER is resumed (SendMessage) to re-cut a file that the main
+  thread has surgically edited since the agent's last write, the agent will silently REVERT those
+  edits — it reconstructs the file from its own transcript memory, not from the current disk
+  state. Two mandatory countermeasures: (a) the resume message must say, explicitly, "the disk
+  file is NEWER than your memory — re-read it and use IT as your base, preserving every line you
+  don't have a reason to change"; and (b) the main thread must re-verify its ENTIRE fix ledger by
+  grep after EVERY sealed overwrite, not just the items the new directive touched — treat every
+  agent overwrite as a potential rollback of all prior fixes.
+- **Why:** 2026-07-22, PG deck-v2 copy phase — after an adversarial review, 8 surgical fixes were
+  applied to the copy on the main thread. The sealed copywriter was then resumed for an
+  operator-ruled structural re-cut. Its third cut silently regressed THREE of the fixes (a
+  factual verb, a reviewed opener, and the client's own quoted words reverted to a paraphrase)
+  while its self-audit reported those boards "unchanged" — the audit compared against its own
+  prior draft, not the disk. Caught only because the main thread re-ran the full fix-ledger grep
+  battery after the overwrite. A partial check ("did the NEW rulings land?") would have shipped
+  reverted client-facing copy through a review that had already passed it.
+- **How to apply:** (1) Fix-forward briefs: every resume of a writing agent whose target has
+  changed on disk carries the re-read-the-disk-base instruction. (2) The fix ledger is cumulative
+  across the whole phase: keep every applied fix greppable (distinctive strings), and re-run the
+  FULL battery after each agent write. (3) An agent's "unchanged" self-report describes ITS
+  transcript, never the disk — trust the grep, not the report (Lesson 26 applied to subagents).
+  (4) The reviewer's fix-verification pass must re-run after any subsequent overwrite of the
+  reviewed file, because "verified fixed" expires the moment another writer touches it.
