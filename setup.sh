@@ -38,7 +38,7 @@ cat >> "$CLAUDE_MD" << 'HEREDOC'
 ## When working inside ~/claude-hq:
 AGENTS.md loads automatically. On session start:
 1. Read commander/LESSONS.md (past mistakes)
-2. Read registry.json (25 tools, 11 stacks)
+2. Read registry.json (tool + stack inventory — counts self-declared inside)
 3. Classify the user's task
 4. For non-trivial tasks: load commander/COMMANDER.md and follow its protocol
 5. Auto-activate the right tools by running install commands

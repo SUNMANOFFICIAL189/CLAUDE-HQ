@@ -11,9 +11,9 @@
 CLAUDE HQ is a **meta-registry + orchestration brain** for Claude Code. It contains:
 
 1. **The Commander** → `commander/COMMANDER.md` — Orchestration agent that decomposes any task, delegates to specialists, enforces quality gates and cost control
-2. **Tool Registry** → `registry.json` — Catalog of 25 tools, 256+ skills, 138 subagents
+2. **Tool Registry** → `registry.json` — Catalog of every tool and skill (counts self-declared inside as `tool_count` / `skill_count`)
 3. **Operating Principles** → Boris Cherny's engineering philosophy, zero-cost-first protocol, credential safety
-4. **Predefined Stacks** → 11 tool combinations for common workflows
+4. **Predefined Stacks** → tool combinations for common workflows (see `tool_combinations` in the registry)
 
 ---
 

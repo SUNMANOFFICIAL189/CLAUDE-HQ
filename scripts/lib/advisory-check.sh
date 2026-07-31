@@ -18,7 +18,10 @@ mkdir -p "$TRUST_GATE_TMP"
 LEDGER="$HQ_ROOT/commander/INCIDENT_LEDGER.md"
 
 # Author allowlist — trusted orgs that auto-pass on metadata alone.
-# Deliberately excludes vercel/* until 2026-07-20 (see INCIDENT_LEDGER).
+# Deliberately excludes vercel/* and vercel-labs/*. Their cooling-off expired
+# 2026-07-20, but they were never re-admitted here — so they resolve to UNKNOWN
+# and take the full Tier C pipeline. Re-admission needs a published post-mortem +
+# an independent supply-chain review first (see INCIDENT_LEDGER).
 ALLOWLIST=(
   "SUNMANOFFICIAL189"
   "anthropics"

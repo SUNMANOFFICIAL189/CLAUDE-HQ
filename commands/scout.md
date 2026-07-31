@@ -41,8 +41,11 @@ Example: `/scout kubernetes yaml linting for production deployments`
 - If a search returns no result above 1,000 installs AND no author on the
   allowlist, report "no trustworthy candidate found" rather than offering
   low-reputation options.
-- Skills in active cooling-off (Vercel through 2026-07-20) are filtered out
-  silently — do not surface them.
+- Skills from an author in active cooling-off are filtered out silently — do not
+  surface them. Read the current list from `commander/INCIDENT_LEDGER.md` at run
+  time; never hardcode an owner or a date here. (As of 2026-07-31: none active.
+  Vercel expired 2026-07-20 but stays off the allowlist, so it is not filtered —
+  it is scrutinised as UNKNOWN instead.)
 - Every install decision is logged in `scripts/.trust-gate.log`.
 
 ## Output format

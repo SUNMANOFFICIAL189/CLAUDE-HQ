@@ -104,7 +104,10 @@ Defined in `scripts/lib/advisory-check.sh`. Current list:
 - `keshavsuki`
 - `ruvnet`
 
-**Deliberately excluded (cooling-off):** `vercel/*`, `vercel-labs/*` until 2026-07-20.
+**Deliberately excluded:** `vercel/*`, `vercel-labs/*`. Their 90-day cooling-off expired
+2026-07-20, but they were never added to the allowlist — re-admission needs a published
+post-mortem plus an independent supply-chain review, neither of which has been verified.
+They therefore resolve to UNKNOWN and require the full Tier C pipeline. See `INCIDENT_LEDGER.md`.
 
 **Allowlist does not skip Layer 1.** File-content scans still run after clone.
 

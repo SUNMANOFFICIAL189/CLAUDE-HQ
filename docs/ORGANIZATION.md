@@ -37,7 +37,7 @@ Artefacts fall into one of three layers. Each layer has a single canonical home.
 │   └── registry.json
 ├── tools/                 — canonical copies of local tool collections
 ├── docs/                  — project docs (this file, READMEs, guides)
-├── registry.json          — tool catalog (32 tools, 10 skills)
+├── registry.json          — tool catalog (counts self-declared inside)
 ├── mempalace.yaml         — MemPalace room config
 ├── AGENTS.md              — master system prompt (loads Commander)
 ├── CLAUDE.md              — code-review-graph MCP tool guide

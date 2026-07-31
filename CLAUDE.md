@@ -66,7 +66,8 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 
 ### Cooling-off register
 - `commander/INCIDENT_LEDGER.md` — vendors on 90-day elevated-scrutiny.
-- Current active: `vercel/*`, `vercel-labs/*` (until 2026-07-20, Apr 2026 incident).
+- Current active: **none.** (`vercel/*`, `vercel-labs/*` expired 2026-07-20; they remain
+  OFF the allowlist, so they still require the full Tier C pipeline. See INCIDENT_LEDGER.md.)
 - Cooling-off blocks allowlist — it overrides trust, never the other way around.
 
 ### Data that motivated this gate
