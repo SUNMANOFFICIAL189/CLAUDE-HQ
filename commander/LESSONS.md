@@ -25,7 +25,8 @@
   Reputation is a tie-breaker when other layers pass, never an auto-pass.
 - **Why:** Snyk data shows issue prevalence is roughly flat across install
   counts. The `find-skills` skill itself (1.1M installs) is published by
-  vercel-labs — currently in cooling-off.
+  vercel-labs — whose cooling-off has since expired (2026-07-20), but which
+  remains off the allowlist and so still takes the full Tier C pipeline.
 - **How to apply:** Trust Gate Layer 4 (reputation) runs AFTER Layers 0.5-3
   and only affects the auto-pass vs manual-review decision.
 
@@ -942,3 +943,49 @@
   transcript, never the disk — trust the grep, not the report (Lesson 26 applied to subagents).
   (4) The reviewer's fix-verification pass must re-run after any subsequent overwrite of the
   reviewed file, because "verified fixed" expires the moment another writer touches it.
+
+### 31. Cite SYMBOLS, not line numbers — your own later edit in the same changeset will shift them
+- **Rule (three clauses — the absolute first draft was unfollowable; see the amendment note):**
+  1. **PROOF citations — symbols only, never line numbers.** When a doc/comment/memory/handoff
+     cites code as *evidence for a claim*, name the **function, variable, or branch**
+     (`is_in_cooling_off()`, `ALLOWLIST=(…)`, "the UNKNOWN branch"). Where the claim is
+     load-bearing, embed a **runnable reproduce command** with its expected output — with an
+     **ABSOLUTE path**, and RUN it from a different working directory before shipping it.
+     A relative path fails as `command not found`, which reads as "the thing was deleted."
+  2. **NAVIGATIONAL pointers — line numbers allowed, but never into a file you are editing in
+     the same batch,** and always paired with enough anchor text to re-find the spot if it
+     moves. This is where the absolute version broke: a BACKLOG "start here" pointer is more
+     useful with a line number than without, and a citation into a file nobody is touching
+     does not rot.
+  3. **Corollary to Lesson 30:** after ANY edit, re-verify the ENTIRE fix ledger for the
+     session — including claims you wrote earlier and believe settled — because growing file
+     X by N lines silently invalidates every earlier citation INTO file X, including ones
+     written minutes ago and already verified.
+- **Amendment note (same day):** clause 1 originally read "never `file.ext:LINE` in a durable
+  artefact, full stop." The very batch that wrote it violated it four times, and the re-check
+  proved *why*: of ~30 line citations written that day, the ONLY ones that rotted were those
+  pointing into the two files the batch itself grew (`INCIDENT_LEDGER.md` +43 lines, a
+  Decision Log prepend). Every pointer into an untouched file still resolved correctly. An
+  absolute rule that gets violated 4× on its first outing is Lesson-20 vibes, not doctrine —
+  so it was narrowed to the shape that actually catches the failure. Do not re-absolutise it
+  without evidence that navigational pointers rot in untouched files.
+- **Why:** 2026-07-31, Trust Gate cooling-off reconciliation — I wrote a paragraph in
+  `INCIDENT_LEDGER.md` proving "expiry did NOT re-admit vercel to auto-pass", citing
+  `advisory-check.sh:95` (date compare), `:22-35` (the ALLOWLIST array), and `:138`
+  (the UNKNOWN branch). All three were correct when written. Then, **in the same
+  changeset**, I added 3 comment lines to the top of that same file, shifting everything
+  by +3. The citation for "UNKNOWN — requires full Tier C" ended up pointing at
+  `return 0` — the ALLOWLISTED auto-pass, the exact opposite of what the paragraph
+  asserted. A future auditor following the citation would have read the reverse of the
+  truth in a security doc, and "corrected" the doctrine in the wrong direction. I did not
+  catch it; the adversarial review did. Note this defeated a gate I had already passed:
+  the trace was verified correct BEFORE the comment edit, so the verification expired
+  without anything re-firing.
+- **How to apply:** (1) durable artefact + code evidence → symbol names or a reproduce
+  command, never line numbers; (2) if you edit a file, immediately grep every artefact
+  that cites it — a same-changeset edit is the highest-risk case precisely because the
+  citation felt verified minutes earlier; (3) prefer `bash -c '<command>'` + expected
+  output over any positional reference, and execute it before shipping the claim;
+  (4) pairs with Lesson 26 (verify-then-state), 29 (sweep to empty), 30 (re-verify the
+  full ledger after every write). This rule is the same failure one layer down: not
+  another writer overwriting you, but **you invalidating your own earlier proof.**
