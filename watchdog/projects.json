@@ -65,6 +65,14 @@
       "lessons_path": null,
       "added": "2026-07-05",
       "notes": "Product (sig-D-01) built out of the get-rich-scheme pipeline. Auto-fills public-agency bid PDFs from a saved contractor profile. Own repo SUNMANOFFICIAL189/bidfill (private). Web = Next.js on Cloudflare Pages; data = Supabase+RLS; fill engine = Python worker on Hetzner CX23 (77.42.43.44); LLM = paid-tier Gemini. Two spikes green (detection + placement). Phase 4 build started 2026-07-05 on Opus 4.8 + phased orchestration. Layers 0+A+B (A=worker resilience; not C/D, single product). Spec + spikes live in ../get-rich-scheme."
+    },
+    {
+      "name": "whitelabel-banking-research",
+      "display_name": "White-Label Banking Research",
+      "repo_path": "/Users/sunil_rajput/projects/whitelabel-banking-research",
+      "lessons_path": null,
+      "added": "2026-08-10",
+      "notes": "Supplier-decision research: white-label banking + physical card issuing. Triggered by a $10k API-integration quote from kalzero.com. Verdict delivered 2026-07-28 (don't proceed with Kalzero as-is; 25-provider alternative survey). Layer 0 ONLY — research project, no long-running process, no autonomous decisions, so no A/B/C/D layers apply. Local git, NO remote (deliberate — see project Decision Log 2026-08-10). PARKED awaiting operator input (region, fiat-vs-crypto, volume), not further research. Expect low commit activity; that is the parked state, not a stall."
     }
   ]
 }
