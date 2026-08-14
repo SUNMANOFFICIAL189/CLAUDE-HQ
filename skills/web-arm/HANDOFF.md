@@ -64,7 +64,7 @@ On any resume, run the RECONCILE block below BEFORE trusting this table. Never m
 |---|---|---|
 | shadcn skill | DONE | scanned+wired; source `repos/web-arm/shadcn-ui @ d4fc45b1fbab` |
 | gsap ×5: core · timeline · scrolltrigger · react · performance (ruling 5) | DONE | scanned+wired; `gsap-skills @ aed9cfd32777` |
-| emil ×3: pick-ui-library · review-animations · animate | DONE | scanned+wired; `emil-skills @ 78761e1b57f9`. Repo grew again (animation-vocabulary, prototype — NOT in wave). registry.json:819/:841 singular→plural fix at Phase 5 |
+| emil ×3: pick-ui-library · review-animations · animate | DONE | scanned+wired; `emil-skills @ 78761e1b57f9`. FOUR siblings remain unwired (animation-vocabulary · apple-design · ask-sonner · prototype — all pre-scanned PASS in coverage closure). registry.json singular→plural fix LANDED @6400bc3 |
 | emil ×2: improve-animations · find-animation-opportunities | DONE — **operator override 2026-08-14** | Gate HARD FAIL = verified FP (skills' own anti-injection rule quotes the attack phrase, SKILL.md:25/:21; June impeccable precedent). Operator: "override the two, and continue." Override note appended to scan log. Wired. |
 | scroll-world | DONE | scanned+wired from oso95 exactly; `scroll-world @ 71cc36d3bb15`; use-time cost ~$27/chain — rail-3 gate per use |
 | ~~find-skills (vercel-labs)~~ | DEFERRED | operator ruling → HQ BACKLOG 2026-08-14 entry |
@@ -80,13 +80,13 @@ ai-website-cloner-template: **12 agent-config dirs quarantined** (`.claude` → 
 etc.) — permanent; the harness never auto-loads another repo's instructions. Instatic = clone+scan
 only, routed to the parked CMS conversation.
 
-### Lane 4 — new MCP servers · **3 REGISTERED · 3 HELD (2026-08-14)**
+### Lane 4 — new MCP servers · **4 REGISTERED (incl. figma via keychain) · 1 DROPPED · 1 HELD — final 2026-08-14**
 | Server | Status | Detail |
 |---|---|---|
 | shadcn (official) | REGISTERED | `npx -y shadcn@4.18.0 mcp` — stdio; source = the scanned shadcn-ui clone |
 | Magic UI (official org) | REGISTERED | `npx -y @magicuidesign/mcp@2.0.0` — source cloned+scanned PASS (`magicui-mcp @` .provenance) |
 | Aceternity UI | REGISTERED, low-trust note | `npx -y aceternityui-mcp@1.0.2` — UNOFFICIAL 3rd-party wrapper, single maintainer, stale since 2025-07; source cloned+scanned PASS. Weakest provenance in the stack — replace if an official server appears |
-| Figma-Context-MCP | **HELD — needs `FIGMA_API_KEY`** | Most credible of the six (15.7k★). Source cloned+scanned PASS. One-line registration once the operator generates a free Figma token: `npx -y figma-developer-mcp@0.13.2 --figma-api-key=$FIGMA_API_KEY --stdio` (the `--stdio` flag is REQUIRED — defaults to HTTP otherwise) |
+| Figma-Context-MCP | **REGISTERED** (superseding the earlier HELD) | Via Keychain launcher `scripts/mcp-launchers/figma-mcp.sh`, pinned 0.13.2 + `--stdio`; keychain entry `claude-mcp-figma-api-key` CONFIRMED present 2026-08-14. Connects next session start |
 | 21st.dev Magic | **DROPPED — operator ruling 2026-08-14** | Replaced by Magic UI + shadcn (both already live) + heroui reference shelf. (Was held on account+cost facts; operator chose replacement over subscription. M5 contradiction resolved — this row now matches LIBRARY §10.) |
 | google-fonts-mcp | **HELD — does not exist** | No npm package found (only a PyPI namesake + GitHub near-misses). House `_TYPE/` library covers fonts; `Microck/font-mcp` unpublished. Route stays held per plan |
 MCP note: registrations load at session start — handshake checks next session. New MCPs pinned;
@@ -128,9 +128,13 @@ Keychain launcher** (`scripts/mcp-launchers/figma-mcp.sh`, mirrors exa pattern, 
 --stdio) — waiting only on the operator's one-time `security add-generic-password` (entry name:
 `claude-mcp-figma-api-key`); no keychain entry yet as of writing.
 
-### Phase 5 — record · **PENDING**
-registry.json entries + emil pointer fix · armoury republish · memory/vault sync · **commits via
-/sync with their own explicit go (Lesson 32)** · this handoff refreshed.
+### Phase 5 — record · **LANDED @ `6400bc3` (2026-08-14, operator: "commit it")**
+Committed+pushed to CLAUDE-HQ main: skills/web-arm/ (29 skills + handoff + library + plan + scan log
++ provenance) · figma-mcp.sh launcher · registry.json emil pointer fix · BACKLOG vercel entry ·
+.claude/handoff-path pin. Both secret gates clean on staged bytes; watchdog files excluded (unrelated
+pre-existing). Figma keychain entry CONFIRMED present — server connects next session start.
+REMAINING (small): armoury artifact republish (status flips) · memory/vault sync (/save-grade) ·
+optional L7 emil-design-eng re-vendor decision.
 
 ## RECONCILE block (run on EVERY resume — disk beats this doc; corrected per proof-check M4)
 ```
@@ -139,7 +143,7 @@ ls ~/.claude/agents/                                            # expect 4 .md f
 python3 -c "import json,os;d=json.load(open(os.path.expanduser('~/.claude.json')));print(sorted(d['mcpServers']))"  # expect aceternityui, figma, lightpanda, magicui, shadcn, superdesign among them
 git -C ~/claude-hq tag -l "pre-webarm*"                         # expect pre-webarm-activation-2026-08-14
 ls ~/claude-hq/repos/web-arm/ | wc -l                           # expect 18 clones
-cat ~/claude-hq/skills/web-arm/.provenance | wc -l              # expect 19 pin lines
+cat ~/claude-hq/skills/web-arm/.provenance | wc -l              # expect 23 lines (18 repo pins + 5 source/house pins)
 find ~/claude-hq/repos/web-arm -maxdepth 2 \( -name CLAUDE.md -o -name AGENTS.md -o -name .claude -o -name .agents \) ! -name "*.quarantined" ! -path "*/node_modules/*"   # expect EMPTY — non-empty = quarantine re-armed by a git op, RE-SWEEP before proceeding
 ```
 
