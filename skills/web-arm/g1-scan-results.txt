@@ -1,0 +1,183 @@
+--- design-orchestration ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/design-orchestration
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/design-orchestration
+--- scroll-experience ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/scroll-experience
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/scroll-experience
+--- tailwind-patterns ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/tailwind-patterns
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/tailwind-patterns
+--- core-components ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/core-components
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/core-components
+--- react-ui-patterns ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/react-ui-patterns
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/react-ui-patterns
+--- interactive-portfolio ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/interactive-portfolio
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/interactive-portfolio
+--- 3d-web-experience ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/3d-web-experience
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/3d-web-experience
+--- web-design-guidelines ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/web-design-guidelines
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/web-design-guidelines
+--- web-performance-optimization ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/web-performance-optimization
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/web-performance-optimization
+--- seo-audit ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/seo-audit
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/seo-audit
+--- seo-fundamentals ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/seo-fundamentals
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/seo-fundamentals
+--- schema-markup ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/schema-markup
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/schema-markup
+--- programmatic-seo ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/programmatic-seo
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/programmatic-seo
+--- geo-fundamentals ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/geo-fundamentals
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/agent-skills-mega/skills/skills/geo-fundamentals
+--- artifacts-builder ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/awesome-claude-skills/artifacts-builder
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/awesome-claude-skills/artifacts-builder
+--- humanizer ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/humanizer
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/humanizer
+--- agent ui-designer ---
+magika_scan: PASS — no extension-spoofing detected in /private/tmp/claude-501/-Users-sunil-rajput/9732518e-2590-40b8-8f79-c9c0df12f5c5/scratchpad/agent-stage/ui-designer
+secret_scan: PASS — no injection/secret patterns in /private/tmp/claude-501/-Users-sunil-rajput/9732518e-2590-40b8-8f79-c9c0df12f5c5/scratchpad/agent-stage/ui-designer
+--- agent frontend-developer ---
+magika_scan: PASS — no extension-spoofing detected in /private/tmp/claude-501/-Users-sunil-rajput/9732518e-2590-40b8-8f79-c9c0df12f5c5/scratchpad/agent-stage/frontend-developer
+secret_scan: PASS — no injection/secret patterns in /private/tmp/claude-501/-Users-sunil-rajput/9732518e-2590-40b8-8f79-c9c0df12f5c5/scratchpad/agent-stage/frontend-developer
+--- agent accessibility-tester ---
+magika_scan: PASS — no extension-spoofing detected in /private/tmp/claude-501/-Users-sunil-rajput/9732518e-2590-40b8-8f79-c9c0df12f5c5/scratchpad/agent-stage/accessibility-tester
+secret_scan: PASS — no injection/secret patterns in /private/tmp/claude-501/-Users-sunil-rajput/9732518e-2590-40b8-8f79-c9c0df12f5c5/scratchpad/agent-stage/accessibility-tester
+--- agent ux-researcher ---
+magika_scan: PASS — no extension-spoofing detected in /private/tmp/claude-501/-Users-sunil-rajput/9732518e-2590-40b8-8f79-c9c0df12f5c5/scratchpad/agent-stage/ux-researcher
+secret_scan: PASS — no injection/secret patterns in /private/tmp/claude-501/-Users-sunil-rajput/9732518e-2590-40b8-8f79-c9c0df12f5c5/scratchpad/agent-stage/ux-researcher
+--- frontend-design (added 2026-08-14 per verifier F2) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/skills/web-arm/frontend-design
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/skills/web-arm/frontend-design
+--- lane5/shadcn (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/shadcn-ui/skills/shadcn
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/shadcn-ui/skills/shadcn
+--- lane5/gsap-core (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-core
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-core
+--- lane5/gsap-timeline (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-timeline
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-timeline
+--- lane5/gsap-scrolltrigger (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-scrolltrigger
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-scrolltrigger
+--- lane5/gsap-react (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-react
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-react
+--- lane5/gsap-performance (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-performance
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-performance
+--- lane5/pick-ui-library (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/pick-ui-library
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/pick-ui-library
+--- lane5/review-animations (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/review-animations
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/review-animations
+--- lane5/improve-animations (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/improve-animations
+secret_scan: HARD FAIL — 1 suspicious patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/improve-animations
+[PROMPT_INJECTION] pattern: ignore (all |previous |prior )?(above |earlier )?(instructions|prompts|rules)
+  -> /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/improve-animations/SKILL.md
+--- lane5/find-animation-opportunities (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/find-animation-opportunities
+secret_scan: HARD FAIL — 1 suspicious patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/find-animation-opportunities
+[PROMPT_INJECTION] pattern: ignore (all |previous |prior )?(above |earlier )?(instructions|prompts|rules)
+  -> /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/find-animation-opportunities/SKILL.md
+--- lane5/animate (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/animate
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/animate
+--- lane5/scroll-world (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/scroll-world/skills/scroll-world
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/scroll-world/skills/scroll-world
+OPERATOR OVERRIDE 2026-08-14: improve-animations + find-animation-opportunities — HARD FAIL verified FALSE POSITIVE (anti-injection rule quoting the attack phrase; June impeccable precedent). Operator: 'override the two, and continue'.
+--- lane6/cult-ui (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/cult-ui
+secret_scan: HARD FAIL — 1 suspicious patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/cult-ui
+[PROMPT_INJECTION] pattern: new (system |primary )?(prompt|instructions|rules)
+  -> /Users/sunil_rajput/claude-hq/repos/web-arm/cult-ui/apps/www/public/r/styles/default/prompt-library.json
+  -> /Users/sunil_rajput/claude-hq/repos/web-arm/cult-ui/apps/www/public/r/prompt-library.json
+--- lane6/kokonutui (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/kokonutui
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/kokonutui
+--- lane6/bklit-ui (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/bklit-ui
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/bklit-ui
+--- lane6/ai-website-cloner-template (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/ai-website-cloner-template
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/ai-website-cloner-template
+--- lane6/website-downloader (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/website-downloader
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/website-downloader
+--- lane6/screenshot-to-code (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/screenshot-to-code
+secret_scan: HARD FAIL — 1 suspicious patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/screenshot-to-code
+[THIRD_PARTY_FETCHER] pattern: curl[[:space:]]+[^|]*\|[[:space:]]*(bash|sh|zsh|python)
+  -> /Users/sunil_rajput/claude-hq/repos/web-arm/screenshot-to-code/scripts/cursor-cloud-install.sh
+--- lane6/ditto-site (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/ditto-site
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/ditto-site
+--- lane6/anime (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/anime
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/anime
+--- lane6/motion (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/motion
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/motion
+--- lane6/instatic (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/instatic
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/instatic
+LANE 6 REVIEW NOTES 2026-08-14: cult-ui flag = FALSE POSITIVE (prompt-library component UI copy). screenshot-to-code flag = benign-standard (official Poetry installer in scripts/cursor-cloud-install.sh) — script marked NEVER-EXECUTE; app run deferred to NTF w/ deliberate install. ai-website-cloner-template: 12 agent-config dirs quarantined (.quarantined suffix) permanently.
+LIVE-FIRE EVENT 2026-08-14: harness auto-loaded ai-website-cloner-template's root CLAUDE.md+AGENTS.md into session context (benign template docs, treated as data). Root-level instruction files were NOT in the original quarantine list — hole closed by sweeping all 10 clones for CLAUDE.md/AGENTS.md/GEMINI.md/.cursorrules/.windsurfrules/CONVENTIONS.md.
+--- lane4/magicui-mcp (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/magicui-mcp
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/magicui-mcp
+--- lane4/aceternityui-mcp (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/aceternityui-mcp
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/aceternityui-mcp
+--- lane4/figma-context-mcp (2026-08-14) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/figma-context-mcp
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/figma-context-mcp
+--- lane6-ext/heroui (2026-08-14, 21st.dev replacement) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/heroui
+secret_scan: HARD FAIL — 1 suspicious patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/heroui
+[THIRD_PARTY_FETCHER] pattern: curl[[:space:]]+[^|]*\|[[:space:]]*(bash|sh|zsh|python)
+  -> /Users/sunil_rajput/claude-hq/repos/web-arm/heroui/skills/heroui-native/SKILL.md
+  -> /Users/sunil_rajput/claude-hq/repos/web-arm/heroui/skills/heroui-migration/SKILL.md
+  -> /Users/sunil_rajput/claude-hq/repos/web-arm/heroui/skills/heroui-react/SKILL.md
+  -> /Users/sunil_rajput/claude-hq/repos/web-arm/heroui/apps/docs/skills/install.sh
+--- unwired/gsap-frameworks (2026-08-14 coverage closure) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-frameworks
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-frameworks
+--- unwired/gsap-plugins (2026-08-14 coverage closure) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-plugins
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-plugins
+--- unwired/gsap-utils (2026-08-14 coverage closure) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-utils
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/gsap-skills/skills/gsap-utils
+--- unwired/animation-vocabulary (2026-08-14 coverage closure) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/animation-vocabulary
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/animation-vocabulary
+--- unwired/apple-design (2026-08-14 coverage closure) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/apple-design
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/apple-design
+--- unwired/ask-sonner (2026-08-14 coverage closure) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/ask-sonner
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/ask-sonner
+--- unwired/prototype (2026-08-14 coverage closure) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/prototype
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/emil-skills/skills/prototype
+--- unwired/migrate-radix-to-base (2026-08-14 coverage closure) ---
+magika_scan: PASS — no extension-spoofing detected in /Users/sunil_rajput/claude-hq/repos/web-arm/shadcn-ui/skills/migrate-radix-to-base
+secret_scan: PASS — no injection/secret patterns in /Users/sunil_rajput/claude-hq/repos/web-arm/shadcn-ui/skills/migrate-radix-to-base
+PROOF-CHECK FIXES 2026-08-14: H1 gsap-skills root files quarantined (Lane-5 sources added to sweep scope); M1 14 agent-config DIRS quarantined across all clones incl. shadcn-ui/.claude (pre-granted Bash permissions — the sharpest instance); M3 dangling symlink quarantined; 8 unwired skill dirs pre-scanned. STANDING RULE EXTENDED: every clone (any lane) gets root-FILE + config-DIR sweep; quarantine renames are working-tree-only — ANY git restore/checkout/stash in repos/web-arm re-arms them → re-run the residual check after any git op there.

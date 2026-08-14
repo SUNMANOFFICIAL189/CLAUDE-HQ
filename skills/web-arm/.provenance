@@ -1,0 +1,23 @@
+agent-skills-mega/skills @ 77a348f81
+awesome-claude-skills @ be2a406
+humanizer @ 523374d
+frontend-design @ claude-plugins-official marketplace (official, Apache-2.0)
+superdesign-mcp @ dd2e0b1 (CLASS 2 live-path executable)
+web-arm/shadcn-ui @ d4fc45b1fbab (Lane 5 source)
+web-arm/gsap-skills @ aed9cfd32777 (Lane 5 source)
+web-arm/emil-skills @ 78761e1b57f9 (Lane 5 source)
+web-arm/scroll-world @ 71cc36d3bb15 (Lane 5 source)
+web-arm/cult-ui @ 3b855612fb52 (Lane 6 reference)
+web-arm/kokonutui @ 13f3d666c008 (Lane 6 reference)
+web-arm/bklit-ui @ c57f66bfa7c3 (Lane 6 reference)
+web-arm/ai-website-cloner-template @ cc6f35b31a2e (Lane 6 reference)
+web-arm/website-downloader @ 130ad63d7163 (Lane 6 reference)
+web-arm/screenshot-to-code @ d026163f586d (Lane 6 reference)
+web-arm/ditto-site @ 3860a1a3a340 (Lane 6 reference)
+web-arm/anime @ 01b81be1df68 (Lane 6 reference)
+web-arm/motion @ adaf7a4e5368 (Lane 6 reference)
+web-arm/instatic @ 6b055cf782ed (Lane 6 reference)
+web-arm/magicui-mcp @ 6f71f4b204ce (Lane 4 source)
+web-arm/aceternityui-mcp @ 00bc43c77771 (Lane 4 source)
+web-arm/figma-context-mcp @ c083d65c7e00 (Lane 4 source)
+web-arm/heroui @ cabf40b30c3d (Lane 6 ext — 21st.dev replacement)

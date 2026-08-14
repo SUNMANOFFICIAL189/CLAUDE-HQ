@@ -816,7 +816,7 @@
     {
       "id": "emil-design-eng",
       "name": "Emil Kowalski Design Engineering Skill",
-      "source": "https://github.com/emilkowalski/skill",
+      "source": "https://github.com/emilkowalski/skills",
       "type": "github_repo",
       "category": "design",
       "owner": "external",
@@ -838,7 +838,7 @@
       "dependencies": [],
       "setup_instructions": {
         "method": "npx_install",
-        "command": "npx skills add emilkowalski/skill"
+        "command": "npx skills add emilkowalski/skills"
       },
       "integration_notes": "The animation quality layer. Use case-by-case, not always-on. Activate when frontend agent is building interactive UI. Pairs with ui-ux-pro-max (design decisions) and stitch-skills (design-to-code).",
       "priority": "MEDIUM",
