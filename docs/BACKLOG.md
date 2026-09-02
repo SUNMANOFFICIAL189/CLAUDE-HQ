@@ -1986,3 +1986,166 @@ Related observation, not a defect: the pillar mix currently reads The Invite 33.
 - **Estimate:** ~30-45 min including the Tier C run and doctrine note.
 - **How to start:** Read `project_offlimits_web_arm_build_2026_08_12.md` (memory) + the activation plan's G4/G5 mechanics; clone `https://github.com/vercel-labs/skills` with the logged override form, scan, copy `find-skills`, wire, verify in listing.
 - **Acceptance:** skill live in listing + invocation test; Tier C scan logs on record; doctrine note appended to the web-arm LIBRARY entry; this item flipped to [Done].
+
+## [Open] — 2026-08-17 — NTF Phase A1: 7 MEDIUM + 6 LOW residuals from the post-fix proof-check (notes/labels + 4 seams)
+- **What:** The proof-check on the NTF landing wave (guide v2 + narrative L1–L5 + ch7 review read) passed with 0 CRIT/HIGH; residuals are label/note slips in the disposable read file (2 patched by the foreman same day), 6 partial closures of first-pass findings (fragment changelog pointer, Action Plan body still Mode-P-worded beyond its amendment block, corpus/fingerprint notes, read §11), 3 open by design (HANDOFF stale until `/handoff save`; the A4 confirmation email collides with the new "Kept." moment; the untracked CIRRANEU tree has no independent baseline), and 1 operator-ear item (06a M6 solo-attendance reading of "you won't be the only one who remembered").
+- **Why:** Lesson 26/29 hygiene: partial closures become false claims if left; the email collision must be resolved in A4 before Mode L copy ships.
+- **Estimate:** 1 short Opus fix ticket (~30 min) + `/handoff save`.
+- **How to start:** Read `/Volumes/Elements/My_Stuff/OFFLIMITS/_CLIENTS/CIRRANEU/PROJECTS/NEVER_2_FAR/TOV/A1_RECALIBRATION/07_PROOF_CHECK.md` ("Pre-fix findings re-checked" table + new MEDIUM/LOW), batch into one ticket, re-grep.
+- **Acceptance:** every partial-closure row flips to closed with evidence; Action Plan body no longer teaches Mode P; HANDOFF refreshed; A4 ticket carries the email-collision item explicitly.
+
+## [Open] — 2026-08-17 — NTF: choose the handwritten-look typeface (operator parked the exploration)
+- **What:** At checkpoint 24 the operator ruled that a handwritten-look FONT (not real or generated handwriting imagery) carries the family's hand on Never Too Far, naming Caveat as the family of feeling, and explicitly parked the typeface choice: "we can explore other fonts with a handwritten look, but we will do this later." Pick the actual typeface (licence, weights, CJK coverage if Q14 lands multilingual, legibility at ad and mobile sizes, how it behaves beside the Mazius/spoken-serif pairing).
+- **Why:** This overrules the LOCKED Creative Direction §3 ("Never a script font doing an impression of one") and is recorded as Direction deviation #5, so the choice is load-bearing for the whole brand hand: postcards, family lines, ad lines. Leaving it unchosen blocks nothing today but blocks Fold 2 asset production and any ad art direction.
+- **Estimate:** Half a day inside Fold 2 (shortlist 4 to 6, set the same line in each, operator picks).
+- **How to start:** Read `TOV/N2F_Voice_and_Language_v2.md` §6.6 "The type" (deviation #5, ruled) and the locked `PREMISE/NEVER_2_FAR_Creative_Direction_v1_The_Postcard_Home.md` §3 and §4; set the ad-line RIGHT example and one postcard fragment in each candidate; check licence and CJK before showing the operator.
+- **Acceptance:** one typeface named and licensed, recorded in the Fold 2 brand guidelines with the deviation note carried; the guide's §6.6 updated from "the Caveat family of feeling" to the chosen face.
+
+## [Open] — 2026-08-17 — NTF voice guide v2: 10 LOW residuals from the final gate re-run (09c)
+- **What:** The guide passed its final gate (PASS_WITH_NOTES, 0 critical, 0 high, 19/19 prior findings closed, no fix-introduced regressions). Its two MEDIUMs were applied by the foreman before sign-off (the Time-of-day law no longer cites a chapter 7 or gendered-microcopy line as protected; §9's handover checks gained an evidence test and a time-of-day test). The 10 LOW items in `TOV/A1_RECALIBRATION/09c_PROOF_CHECK_RERUN.md` remain: presentational counts, locator sentences, cross-reference polish.
+- **Why:** Lesson 29 hygiene. None blocks the operator's sign-off or any downstream writing; left unfixed they slowly become false claims inside the doc that governs every word the brand ships.
+- **Estimate:** One short Opus ticket (~20 min) folded into the next NTF writing session.
+- **How to start:** Read the LOW section of `09c_PROOF_CHECK_RERUN.md`, batch into one fix ticket against `TOV/N2F_Voice_and_Language_v2.md`, re-grep, no gate re-run needed (LOW only).
+- **Acceptance:** every LOW row closed with evidence; the guide's own counts and locators verify by grep.
+
+## [Open] — 2026-08-17 — NTF: 7 LOW residuals from the checkpoint-25 gate chain (10b + FIX2 deferrals)
+- **What:** The cp25 change (new chapter 6 step 1 + the generalise-by-the-act law) passed its gate after two fix waves. Residual LOWs remain, including two the last wave could not apply because they need `WEBSITE/N2F_Site_Narrative_v1.md` and it was outside that ticket's write set: a note pointing at flag 12 instead of the integration plan, and the file's line-5 governance banner sitting inside a block the file's own reading rule calls copy (pre-existing, predates this change). The rest are presentational (locators, cross-references).
+- **Why:** Lesson 29 hygiene. None blocks writing or sign-off; left alone they slowly become false statements inside the two files that govern every word the brand ships.
+- **Estimate:** One short Opus ticket (~20 min), folded into the next NTF session, ideally alongside the A4 microcopy sweep.
+- **How to start:** Read the LOW sections of `TOV/A1_RECALIBRATION/10b_PROOF_CHECK_CP25_RERUN.md` and the "Not applied" note in the FIX2 ledger on the MISSION_BOARD; batch into one ticket across both files; re-grep; no gate re-run needed (LOW only).
+- **Acceptance:** every LOW row closed with evidence; the narrative's ">" copy lines still hash to cb720d26703cf1a599042c97677960f56b00f19c.
+
+## [Open] — 2026-08-25 — Trust Gate hole 4: `/plugin marketplace add` bypasses the gate entirely
+- **What:** Claude Code plugin installs are a BUILT-IN command, not a Bash tool call, so the PreToolUse Trust Gate never fires. Verified: `~/.claude/settings.json` registers the gate with `"matcher": "Bash"`, and `grep -c 'plugin\|marketplace' ~/claude-hq/scripts/trust-gate.sh` returns 0. So `/plugin marketplace add OWNER/REPO` + `/plugin install NAME` lands arbitrary third-party skills, hooks, agents and scripts with ZERO Magika, ZERO secret-scan, ZERO Socket, ZERO cooling-off. Discovered evaluating `nateherkai/scroll-craft`, whose README instructs exactly this.
+- **Why:** This is the LARGEST of the four known holes. Holes 1–3 need a mistyped command (`pip3`, `npm i -g`) or an internal error; this one is the documented, recommended install path for every plugin in the ecosystem — the route a README tells the operator to take. It also cannot be SHA-pinned: `/plugin marketplace add` tracks a moving branch, so a clean review never binds the next commit.
+- **Estimate:** Investigation first (~1h): determine whether any hook matcher can see plugin installs on this build at all. If none can, the fix is doctrine + a pre-install checklist, not code.
+- **How to start:** Read `~/.claude/settings.json` hook matchers; check whether Claude Code exposes a plugin-install hook event; if not, add a standing rule to `commander/TRUST_GATE.md` that every `/plugin` install is treated as ungated and requires remote inspection (GitHub API + raw reads, no clone) before installing. Cross-ref `project_trust_gate_holes_2026_07_31.md` hole 4.
+- **Acceptance:** either a hook that fires on plugin installs, or TRUST_GATE.md carries the ungated-by-design warning and the pre-install checklist, and the three other docs claiming "every install is gated" are corrected (Lesson 29 sweep to empty).
+
+## [Open] — 2026-08-25 — scroll-craft eval: 5 MEDIUM + 2 LOW residuals from the adversarial review
+- **What:** The `nateherkai/scroll-craft` admission review returned 2 CRITICAL + 4 HIGH (all resolved by rejecting adoption) plus these residuals: M-1 the repo's own README says "Only ever run on Windows... no build has been done on a Mac" (we are on macOS) and adoption would force `npm i playwright-core` into the NTF build as an unrouted dependency decision; M-3 MIT attribution has no mechanism in the arm — `.provenance` records `repo @ sha` with no licence column, and the nearest precedent (`skiper40`, HANDOFF.md "attribution question at use") is an OPEN question not a mechanism; M-4 any skill adoption breaks two RECONCILE invariants (expected 29 web-arm symlinks, 23 `.provenance` lines — both verified exact today) and would read as drift on the next reconcile; M-5 no NTF ticket is permitted to execute a vendoring (G-CURATE selects and must not install; B1 must not adopt an unselected stack; B2 scaffolds the client build) so any arm amendment needs a named owner outside the NTF chain; L-1 vendoring a skill re-imports the same agent-context cost the plugin was rejected for; L-2 `kie.mjs` `download()` writes remote-controlled content to a caller-supplied path (moot while excluded, but not on the record).
+- **Why:** M-3 and M-4 are general — they bite on the NEXT tool the arm admits, not just this one. The arm has no licence field and no counter-update step in its adoption procedure, so both will recur silently.
+- **Estimate:** M-3 + M-4 together ~1h (add a licence column to `.provenance`; add "update the RECONCILE expected counts" to the adoption checklist in ACTIVATION_PLAN). M-1/M-5/L-1/L-2 are eval-specific and die with the rejection.
+- **How to start:** Resolve the `skiper40` attribution question first — it sets the precedent for every MIT source on the shelf. Then add the licence column and the counter-update step to the arm's adoption procedure.
+- **Acceptance:** `.provenance` carries a licence per source; the arm's adoption checklist names the RECONCILE counter update; the skiper40 attribution question is closed with a ruling.
+
+## [Open] — 2026-08-26 — N2F cp69 proof-check MEDIUM/LOW findings (non-blocking, filed per gate)
+**What:** (1) hero sentence width cap 669px is dead measure after the rewrap — no line exceeds 611.6px; re-cap to ~605px and re-check the wrap. (2) Pre-existing handnote mobile clipping: `site.css` late `white-space:nowrap` overrides the 860px media rule; #ache's fragment clips at 390px, the moved gate note fits by luck — move the base rule above the media block. (3) LOW: `aria-label` on a paragraph is ARIA-prohibited (use role="text" wrapper or visually-hidden copy); `scene4_interior.jpg` now unreferenced on disk; the untracked CIRRANEU tree means the cp69 wave has no revert baseline (standing operator-accepted risk, restated by the reviewer).
+**Why:** Surfaced by the blind cp69 proof-check (verdict FAIL on separate CRITICAL/HIGH); MEDIUM/LOW do not block per the gate but must not evaporate.
+**Estimate:** 30–60 min total, all mechanical.
+**How to start:** `_CLIENTS/CIRRANEU/PROJECTS/NEVER_2_FAR/WEBSITE/BUILD/src/css/site.css:112` (cap), `:243` vs `:270` (nowrap), `src/js/scroll.js:96` (aria).
+**Acceptance:** widest line within ~10px of the cap at 1440; all four handnotes unclipped at 390; axe clean on the hero; interior asset either re-referenced or consciously archived.
+
+## [Open] — 2026-08-27 — N2F cp73-74 proof-check MEDIUM/LOW findings (non-blocking, filed per gate)
+**What:** (1) `#bigmark` sits 15px right of everything it should align with — client-space rects fed to a fixed element whose containing block is inset by scrollbar-gutter; subtract the ICB offset once or position it inside `.opening`. (2) The footer paints opaque `--paper` over the site-wide texture, a visible boundary; `background:none` fixes it. (3) Index has no KEYBOARD path home — the hidden markslot is out of the tab order and bigmark is an aria-hidden div; keep markslot in flow at opacity 0 or make bigmark a focusable link. (4) LOW: no print rules (tape labels vanish on print); blocked-tape label 1.35:1 readability; utility pages 404 on favicon; six art files eager-loading without width/height attributes.
+**Why:** Blind cp73-74 proof-check verdict FAIL on separate HIGHs; these do not block but must not evaporate.
+**Estimate:** ~1 hour total, mechanical.
+**How to start:** `WEBSITE/BUILD/src/js/scroll.js:113`, `css/site.css:431`, `index.html:26`.
+**Acceptance:** mark centred equal on all five pages; texture continuous through the footer; Tab reaches a home link on index; print sane; no favicon 404s.
+
+## [Open] — 2026-08-28 — N2F begin-wave proof-check MEDIUM/LOW findings (non-blocking, filed per gate)
+**What:** (1) form data goes nowhere: no name attrs, no action, answers discarded on navigating to payment — carry as params when payment page lands. (2) `/payment` root-absolute href breaks under file:// and subpaths. (3) invisible burger is tabbable on all five pages (opacity:0 but focusable) — visibility:hidden when inline nav shown. (4) calendar grid AT semantics ragged (aria-hidden fillers make uneven rows) — drop aria-hidden, keep aria-disabled. (5) blocked completion label 1.36:1 — darken to ink. (6) past-day numerals 1.86:1, landing month reads blank — raise alpha ~.55. (7) no "question N of 8" for assistive tech — visually-hidden polite counter. (8) cache-bust split cp74 vs cp80 across pages — one token. LOWs: wobble repeats per column (nth-child restarts in display:contents rows), coalescing discards clicks beyond one (17s to reach +12 months), dead radio-era refs in picker.js:87/91, month NAME never renders (only 08/2026 twice), no print styles. SUPERSEDED by cp85: the video-crop/registration finding (the video turn is dead; stop-motion replaces it). RESOLVED as current-ruling: vermilion tape vs cp72's "black box" wording — cp73 restyled all black buttons to red tape, vermilion governs.
+**Why:** Blind begin-wave proof-check verdict FAIL on two HIGHs (no-JS resilience); these do not block but are real.
+**Estimate:** 2-3 hours across a batch ticket.
+**How to start:** `WEBSITE/BUILD/src/pages/begin.html:286,323`, `js/picker.js:87-91,191`, `css/site.css:929`, `css/picker.css:181`.
+**Acceptance:** every item verified by re-measurement; the two contrast numbers past floor; one cache token everywhere.
+
+## [Open] — 2026-08-28 — N2F gate re-run MEDIUM/LOW findings (non-blocking, filed per gate)
+**What:** (1) the aria-hidden fallback table is a live copy-gate hole not documented in render_exclusions.txt — add the .cal-fallback skip note with date and reason (the ledger of holes must stay complete). (2) LOW: no-JS screen-reader users get zero calendar and an unexplained disabled control — a noscript line naming the JavaScript need. (3) LOW: visible boot flash on slow connections as the fallback table swaps to the live sheet (~400ms window) — acceptable progressive enhancement or inline the boot.
+**Why:** Gate re-run verdict FAIL on two new HIGHs; these ride behind them.
+**Estimate:** 30 min inside the same fix wave.
+**How to start:** `WEBSITE/BUILD/qa/render_exclusions.txt`, `src/pages/begin.html:341`.
+**Acceptance:** the exclusions ledger names every live hole; noscript line present; boot seam judged.
+
+## [Open] — 2026-08-29 — N2F TOP-SEVERITY open defects (the CRITICAL/HIGH set, previously only in HANDOFF.md)
+**What:** (1) **cp69 typography criticals, oldest open item.** The widow/orphan rule still breaches at 8 of 129 swept widths including real phone widths 430 and 360 (final line is the lone word "you."); `text-wrap:balance` is INERT for every JS-on visitor because the word spans are `display:inline-block`, while `site.css:569` credits it as working (applied `:574`, defeated `:649`). Riding with them: the weak-word list is 21 words (`js/scroll.js:54`) against the canonical 97-word house list in `OFFLIMITS/system/design-v2/offlimits-deck-system.js`, and the doctrine's comma clause (no line ends on the word after a comma) is unimplemented. (2) **Pressing Back destroys the entire booking** — zero localStorage/sessionStorage in begin.js/picker.js/begin.html, so any navigation away wipes every answer plus the chosen date; the cruellest finding of the cold read, hit by anyone fixing a typo before paying. (3) `#f-addr` is `type="text"` where an email is needed and accepts a postal address silently. (4) Long answers scroll out of view while typing; flicking back jumps the page and stacks answers out of order.
+**Why:** Surfaced by three gates on 2026-08-26/27/28 and by the cold-read journey review. The three earlier N2F backlog entries are scoped MEDIUM/LOW by their own wording, so these top-severity items had no home outside the project handoff — caught by the blind verify of the 2026-08-29 handoff save.
+**Estimate:** half a day for the set.
+**How to start:** `WEBSITE/BUILD/src/js/scroll.js:54`, `css/site.css:569`, `js/begin.js` (persistence), `pages/begin.html` (#f-addr).
+**Acceptance:** widow rule holds across a full width sweep with the 97-word list and the comma clause; a reload or Back keeps every answer and the date; the address field validates as an email.
+
+## [Open] — 2026-08-30 — N2F cp100 proof-check MEDIUM/LOW findings (non-blocking, filed per gate)
+**What:** (1) **The CSS comment lies.** `css/site.css:179` claims the 1.9x relief "stays exactly --paper"; measured over 812,791 non-ink pixels the rendered ground is `(221.6,217.6,198.2)` against `--paper` `(229,225,205)` — 12.5 euclid off, because the texture's mean is 249.5/255 not 255. Every contrast pairing recorded in the cp77 block (`site.css:110-135`) is now stale (body 8.78→8.24, `.cue` 5.75→5.39, hero 10.93→10.26 — all still pass AA; `.cue` dips to 4.23:1 only in the 1st-percentile grain trough). Fix: normalise the texture mean to 255, or move `--paper` to what the composite actually produces (~`#DDD9C6`). (2) **On any dark backdrop every illustration renders solid black** — multiply(x,black)=black; measured 86.7% pure black with an injected black body. Hits Windows High Contrast dark, Dark Reader, user stylesheets; light HCM is fine (Chromium forces a white canvas). Fix: `@media (forced-colors:active){...{mix-blend-mode:normal}}`. (3) **641–860px the hero is ~57% cropped away** — the `<source>` portrait rendition stops at 640 but the tall box continues; measured at 700px both blossom clusters fall outside the frame. PRE-EXISTING (identical in the pre-land backup), and cp100 makes it look *less* broken. Fix: extend the source to `(max-width:900px)`. LOWs: `site.css:186` fetches `paper_relief.webp` with NO cache token — the one asset this checkpoint replaced is the only one unbusted, and `site.css:1162` still carries `?v=cp80`; 5 of 6 pages 404 on favicon; ~5MB dead assets in root (`assets/art2/` 2.4MB, `assets/art/` 2.3MB, `paper_grain.jpg`, `footer_plaster.jpg`) all reachable over HTTP; `site.css:1084` `#vow .zone img{mask-image:none}` is now dead code and the file's only surviving mask declaration; no image carries width/height or lazy loading; low-frequency page-tone blotching is ~10x the old ground (7.2 levels vs 0.75) — cosmetic but a real change of character.
+**Why:** Blind Opus proof-check on the cp100 landing returned FAIL on three separate HIGHs; these ride behind them and must not evaporate. The MEDIUM-1 comment claim is a Lesson-26 failure embedded in a durable artefact — a future reader would trust it.
+**Estimate:** ~2 hours for the set, all mechanical except the --paper decision which is an operator call.
+**How to start:** `WEBSITE/BUILD/src/css/site.css:179` (the false claim), `:186` (missing token), `:110-135` (stale contrast table), `index.html:74` (the 640 breakpoint).
+**Acceptance:** the comment states the measured value or the texture is normalised; contrast table recomputed against the real ground; forced-colors carve-out present; hero source extended and re-measured at 700px.
+
+## [Open] — 2026-08-30 — N2F: review coverage gaps the cp100 proof-check could NOT close
+**What:** The blind review named these itself: never rendered at devicePixelRatio>=2 (the `@media (min-resolution:2dppx)` texture branch was only simulated by forcing the size at dpr 1 — actual retina resampling untested); never rendered a genuine dark forced-colors theme (Playwright's emulation gives a WHITE canvas, so the dark-theme conclusion is reasoned, not observed); never produced a print PDF (three attempts hung the screenshot backend, one 30-minute stall) so the print finding is reasoned not rendered; Chromium only — no Safari, no Firefox, and the whole design now rests on `mix-blend-mode` + `scrollbar-gutter` + `svh`, which WebKit handles differently; `begin.html` tested only in its initial state, so if any picker step leaves the page shorter than the viewport the ground-band HIGH applies there too; no keyboard/tab-order/screen-reader pass; widths 390–2560 only, not 320; no throttled-network timing and compression not modelled; no rendered before/after pixel diff (the backup is not served, so every before/after claim comes from reading the diff and injecting rules in-browser); only `art1_mobile` was compared crop-for-crop against its predecessor, so a silently different re-derivation of e.g. art4 would not have been caught.
+**Why:** Absence of a finding in an uncovered area is not evidence of absence. Recorded so the next gate knows where it is blind rather than inheriting false confidence.
+**Estimate:** a Safari/Firefox + retina + print pass is ~1 hour on real devices.
+**How to start:** open the six pages on an actual iPhone (Safari, dpr 3) and an actual print preview; step `begin.html` through all 8 picker steps checking document height against viewport at each.
+**Acceptance:** each gap either closed with a measurement or consciously accepted on the record.
+
+## [Open] — 2026-08-31 — N2F cp100 re-gate LOW notes (non-blocking, filed per gate)
+**What:** (1) On short pages the footer still stops well above the viewport bottom — testimonials at 1024x1366 leaves 224px of empty ground beneath it. The cp100 fix TEXTURES that region so it is no longer a flat slab, but it does not pull the footer down; the layout is unchanged from before cp100. Whether the footer should stick to the bottom on short pages is an unasked design question. (2) Real-device mobile toolbar behaviour is still unobserved: headless has no browser chrome so `lvh == vh` in every test run, and the "no new scroll on phones" conclusion rests on content exceeding 100lvh by 227px+ at 390/428 widths — true by a wide margin, but inferred rather than seen. (3) The re-gate spot-checked only 2 of 8 illustrations' blend, and nothing below 390px or above 1440px width.
+**Why:** Gate returned PASS_WITH_NOTES; these are the notes. None block, but (2) is the one that would embarrass us if wrong, and it needs a real phone, not another agent.
+**Estimate:** 15 minutes on an actual iPhone.
+**How to start:** open all six pages on a real phone, scroll to the bottom of testimonials and payment with the toolbars both shown and retracted, and check for a bare band.
+**Acceptance:** the toolbar-retracted case observed on a real device, or consciously accepted on the record.
+
+## [Open] — 2026-08-31 — N2F film gate MEDIUM/LOW findings (non-blocking, filed per gate)
+**What:** (1) **Hero scrub cost.** Instrumented: 304 `getImageData` calls / 1267ms of main-thread time across the ~4.4s hero play (≈35fps, not 60). Each `paint()` allocates two fresh 1920x1080 ImageData (16.6MB) → ~2.5GB churn in 4.4s; measured JS heap 241MB. Gated to >=641px, which still catches tablets and low-power laptops. Fix: reuse one ImageData buffer instead of allocating per frame, and/or drop the hero to a lower canvas resolution than its source. (2) **Transform baked once.** `film.js:106` reads `getComputedStyle(img).transform` at `loadedmetadata` only. `.bouquet img{transform:rotate(-22deg)}` applies at min-width:641px ONLY, so resizing a window across 641px leaves the canvas rotated at 390 (measured `matrix(0.927,-0.375,...)` after resize). Fresh loads are correct; only a live resize is wrong. Fix: re-read the transform on resize. LOWs: canvas is appended inside a `<picture>` element (`film.js:98`), which is non-conforming markup; scroll/resize/`seeked` listeners are never removed (`film.js:116-118`, 6 scroll listeners accumulate); the current host (Python SimpleHTTP) answers `Range:` with 200 not 206, so film.js's own stated hard requirement is unmet — it works today only because Chrome buffers whole files, and the blob fallback masks it.
+**Why:** Blind Opus gate on the film work returned FAIL on two separate HIGHs; these ride behind them and must not evaporate. The Range point matters at deploy time, not now.
+**Estimate:** ~1 hour for the set.
+**How to start:** `WEBSITE/BUILD/src/js/film.js:106` (transform), `:116-118` (listeners), the `paint()` function (buffer reuse).
+**Acceptance:** hero play measured at <400ms total main-thread time and heap under 100MB; resizing across 641px leaves the bouquet unrotated below it; listeners removed on teardown.
+
+## [Open] — 2026-08-31 — N2F film gate: coverage the reviewer could NOT close
+**What:** Chromium only — no Safari, no Firefox, and the whole film system rests on `mix-blend-mode` + canvas + `svh`, which WebKit handles differently. No real-device performance (the 241MB heap / 35fps figures are desktop Chromium under instrumentation). No audio check. Only index.html and pages/packages.html were opened — begin, testimonials, payment and confirmation were not.
+**Why:** absence of a finding in an uncovered area is not evidence of absence.
+**Estimate:** 30 min on a real iPhone plus a Safari desktop pass.
+**How to start:** open index.html and packages.html on a real iPhone (Safari) and watch the hero play; check the scenes scrub.
+**Acceptance:** each gap either closed with a measurement or consciously accepted on the record.
+
+## [Open] — 2026-09-02 — Google Cloud spend: 2 decisions still open after the `CLOUD VBHV3N` trace
+**What:** A Google charge (card reference `CLOUD VBHV3N`) was traced to billing account **SUNNY**
+`01691F-377789-CD02C5`. Of 18 projects only 4 can charge. Two live cost sources were found.
+**(1) DONE, no decision needed** — Cloud Run service `flightclub33-v3-demo` (project
+`gen-lang-client-0822890649`, us-west1) had `minScale=1`, holding a machine open 24/7 since
+2026-06-08. Switched to 0 on 2026-09-02 with operator approval. Reversible switch built at
+`scripts/cloudrun-power.sh` (`status` / `on` / `off`); local state + log in `run/cloudrun-state/`
+(gitignored, so that folder is NOT backed up — the script is the durable record).
+**(2) OPEN — claude-mem is on the Gemini PAID tier.** Its API key was SHA-256 fingerprint-matched to
+key `19dbc963-914c-4aeb-95b1-e5180e13cb89` in project `gen-lang-client-0616289156` ("CLAUDE MEM"),
+which has billing attached. 12,975 requests in the 30 days to 2026-09-02, and rising
+(weekly 1,520 → 2,984 → 3,965 → 4,290). The saved config note claimed "$0/mo"; that is disproven and
+the note has been corrected.
+**GROUNDING (added same day, after the Step-0 prior-art grep — supersedes the first draft of this
+entry):** the paid tier was NOT drift. Decision Log 2026-05-06 `[Sunil · operational]` records the
+deliberate flip to paid to clear a 921-observation backlog stuck behind a 20-requests/day free-tier
+cap, on an expected cost of **~£1–3/mo**. And reverting to free is DISQUALIFIED, not merely degraded:
+Decision Log 2026-08-11/12 records that Google's free tier **trains on submitted data with no opt-out**
+and is "Client-IP disqualified"; the OpenRouter `:free` route was rejected on the same privacy ground
+on 2026-05-06. claude-mem observations contain raw session content including client work.
+**So the live question is volume, not tier: has usage outgrown the £1–3/mo the 2026-05-06 decision
+assumed?** Measured split for the week Google counted 4,290 requests — PostToolUse observations
+3,747 (~87%), Stop summaries 154 (~3.6%), rest session-init/context/retries. Disabling PostToolUse
+alone (the "Layer 2" designed 2026-05-05 and never fired) removes ~87% of spend while keeping
+per-turn summaries, SessionStart auto-recall and the paid tier's no-training guarantee.
+**(3) OPEN — no budget alert exists** on the SUNNY account, which is why this surfaced as a card
+charge rather than a warning.
+**Why:** Cost-control doctrine is free-first with an approval gate on any spend. This spend was
+never approved because nobody knew it existed. Item (2) grows with Claude Code usage, so it gets
+worse on its own. Item (3) is what turns the next occurrence into a notification instead of a bill.
+**Estimate:** (2) is a 10-minute decision plus ~5 minutes to apply. (3) is ~10 minutes in the console.
+**How to start:** Read `project_google_cloud_bill_trace_2026_09_02.md`. Get the real numbers first at
+`https://console.cloud.google.com/billing/01691F-377789-CD02C5/reports` — group by project, then by
+service — so the claude-mem decision is made against an actual figure rather than an estimate.
+**Acceptance:** the claude-mem billing question ruled on either way and applied; a budget with an
+email alert live on the SUNNY account; the next month's charge matches expectation.
+
+**UPDATE 2026-09-02 — items (1) and (2) CLOSED, item (3) still open.**
+Console figures (GBP): card charge `CLOUD VBHV3N` = **£20.15** on 1 Sep = August invoice + ~20% VAT.
+August total £16.79 — **Gemini/CLAUDE MEM £13.07**, Cloud Run/FLIGHTCLUB33 £3.72. June £14.46,
+July £37.40. ai-agent-fleet and BIDFILL-PROD: nil.
+Against the 2026-05-06 assumption of ~£1–3/mo, actual is 4–13x over, so volume reduction was applied:
+`CLAUDE_MEM_SKIP_TOOLS` in `~/.claude-mem/settings.json` extended 23 → 59 entries, excluding browser
+mechanics and media-job polling; Bash/Edit/Write/Agent/generate calls deliberately kept. Worker
+restarted and the change **verified live** against its own endpoint (returns `tool_excluded` for the
+new names). Paid tier RETAINED — free tier trains on client data.
+**STILL OPEN — (3) no budget alert on the SUNNY account.** Also open: re-measure on/after 2026-09-16
+against the recorded baseline (12,975 req/30d; 3,813 chargeable observations in the final week;
+expected ~42% cut) and, if weekly requests remain above ~3,000, escalate to disabling the PostToolUse
+hook. Full method + reproduce commands in `project_google_cloud_bill_trace_2026_09_02.md`.

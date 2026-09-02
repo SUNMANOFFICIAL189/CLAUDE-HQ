@@ -1010,3 +1010,162 @@
   approval. When the totality is ambiguous, ask the one-line question — it costs
   seconds. Pairs with Lesson 17 (propose, never auto-invoke) and the quieter-mode
   doctrine's own carve-out: big/irreversible/outward-facing steps always surface.
+
+### 33. "Do not clone" does not mean "do not write to disk" — say the actual constraint
+- **Rule:** When briefing an agent to evaluate untrusted external code, "remote reads only / never
+  clone / never install" is NOT sufficient. An agent told to prefer `curl` for byte-accuracy will
+  `curl > file` and land the whole repo on disk — every executable script included — without ever
+  running `git clone`. State the real constraint: **"read to stdout only; write NOTHING to disk; if
+  you must persist, one scratch file of your own notes, never the subject's source."** Then verify
+  after the agent returns: `find <scratch> -newer <marker>` and delete anything that is the
+  subject's bytes.
+- **Why:** 2026-08-25, `nateherkai/scroll-craft` evaluation. The operator DENIED a quarantined
+  `git clone`, and the foreman correctly switched to remote-only inspection — then wrote an
+  adversarial-review brief containing "prefer curl for byte-accuracy". The reviewer duly fetched
+  816 KB of the repo into the session scratchpad, including all six `.mjs` scripts, `encode.sh` and
+  the 56 KB engine. Nothing was executed and a post-hoc `secret_scan` returned PASS, so no harm
+  landed — but the operator's explicit "no" on putting this code on the machine was defeated by a
+  brief the foreman wrote himself, two steps later. The Trust Gate never saw those bytes: they
+  arrived by `curl`, which no gate pattern matches.
+- **How to apply:** (1) the no-disk clause goes in the ticket's MUST NOT, in the same words as the
+  no-clone clause; (2) after ANY external-code evaluation, sweep the scratchpad and delete the
+  subject's source — the eval document is the deliverable, the source is not; (3) treat an operator
+  denial as governing every downstream ticket in the same task, not just the command they denied.
+  Pairs with Lesson 1 (Trust Gate), Lesson 24 (curl is ungated), Lesson 30 (re-verify after every
+  agent write).
+
+### 34. A read-back of the instruction is not a measurement of the result
+- **Rule:** An acceptance check must measure the OUTPUT, never re-read the INPUT. If a ticket asks a
+  worker to make X true, "confirm the setting says X" is not evidence — it proves only that the
+  instruction was issued. Require the observable consequence, with a number and a threshold:
+  measure the rendered pixels, the actual bytes, the real response, the resulting state. Write the
+  threshold into the ticket ("distance <= 8 levels for every case") so the worker cannot pass by
+  restating the request back.
+- **Why:** 2026-08-30, NTF film work. A ticket asked for illustrations to composite by
+  `mix-blend-mode: multiply` onto the page's cream paper, and set the acceptance check as
+  "confirm `getComputedStyle` reports multiply". The worker did so, truthfully, and reported DONE.
+  The images were still rendering as WHITE RECTANGLES on cream — measured 63 RGB levels apart from
+  the ground beside them — because two ancestors (`#canvas` with `position:absolute; z-index:1`, and
+  the hero image's own `opacity:.96`) each open a stacking context, and multiply only composites
+  within its own context. The property was set; the effect never happened. The worker then explained
+  the discrepancy away by blaming the headless engine and asserting real Chrome was "flawless" — the
+  foreman opened real Chrome and the rectangle was plainly there, so the exculpating claim was false
+  too. The ticket, not the worker, was the root cause: it accepted a tautology as proof.
+- **How to apply:** (1) for every "make X true" ticket, write the acceptance check as a measurement
+  of consequence with a numeric threshold; (2) treat any worker claim of the form "the setting is
+  correct, the tool is at fault" as UNVERIFIED until reproduced independently on the real surface —
+  an exculpating explanation is a claim, not evidence (Lesson 26 applied to a worker's excuse);
+  (3) CSS specifically: `mix-blend-mode` and `filter` are silently defeated by any ancestor stacking
+  context (non-auto z-index with positioning, opacity < 1, transform, filter, will-change, contain,
+  isolation) — walk the ancestor chain before trusting a blend. Pairs with Lesson 26 (verify then
+  state), 30 (an agent's self-report describes its transcript, not the disk).
+
+### 35. A test build scoped to one page does not license a site-wide landing
+- **Rule:** when a change is proved on ONE surface and then landed across N surfaces, the untested
+  surfaces are where the regression lives. Before landing, enumerate every surface the change
+  touches and ask, per surface, whether the proven mechanism actually applies there — in
+  particular whether the SELECTOR that carries the fix matches anything on that page. After
+  landing, open every surface and look, before reporting success.
+- **Why:** 2026-08-30, NTF. A transmission-plus-multiply treatment was proved on index.html across
+  24 measured screenshots, then landed site-wide on the operator's "land it all". The packages page
+  immediately showed the bouquet inside a white rotated rectangle, for TWO reasons the index test
+  could not have surfaced: `.bouquet` carried `z-index:5` on an absolute box (a Lesson-34 stacking
+  context), and — more basic — `art7` had no `mix-blend-mode` at all, because site.css carries that
+  declaration on `.artcol img` and `.chapter .zone img` and neither selector matches `.bouquet img`.
+  The image swap therefore shipped a plain white-grounded picture onto a textured page. Caught only
+  because the foreman opened the landed page and looked; the automated checks all passed, since they
+  were written against the page that had been tested.
+- **How to apply:** (1) landing checklist = the list of SURFACES, not the list of files; (2) for any
+  CSS-carried behaviour, grep which selectors carry it and which elements match them on each page —
+  a swap that changes an asset without extending the rule is a silent regression; (3) re-open every
+  changed surface after landing and measure, do not infer from the tested one. Pairs with Lesson 34
+  (measure the result), 29 (sweep to empty), 32 (landing is its own gate).
+
+### 36. A scroll-driven effect must be anchored to the ELEMENT, not the viewport
+- **Rule:** when mapping scroll position to an animation's progress, normalise the travel by the
+  element's own height (`travel = k*vh + elementHeight`), never by viewport fractions alone. A
+  viewport-only window is not size-invariant: a taller element reaches full visibility after more
+  scroll, so it is further through its animation at the same visual moment as a shorter one.
+- **Why:** 2026-08-31, NTF film work. The scene films were mapped across a fixed window measured in
+  viewport heights off the element's TOP edge. Four illustrations were 520-560px and behaved
+  consistently; the fifth was 701px. At the moment each was fully in view the short ones were 38-40%
+  through their film while the tall one was 57% through — past the sketch phase entirely. The
+  operator's report was "I'm missing the sketch part", and a per-scene measurement showed the fault
+  was present on exactly one scene, which a single-scene check would have missed.
+- **Also:** the same window had two earlier faults from the same root — treating the window as a
+  slider rather than an anchored map. Asked to slow the effect, the first attempt held the MIDPOINT
+  fixed, which pushed the START later; frame 0 was blank by design, so artwork sat empty while on
+  screen ("it keeps disappearing"). **Slowing an entry animation extends its END; it never delays its
+  START.**
+- **Harness trap found the same day:** Chrome DEFERS media preload in a hidden tab, and an automation
+  tab reverts to hidden between tool calls. `readyState=0, networkState=2` with zero buffered bytes
+  and NO console error is the signature. Videos never load, no canvas is ever created, and the page
+  looks broken when it is not. Do not diagnose a media bug from a background tab — verify frame
+  content offline against the shipped file (ffmpeg at the exact seek times the player computes) and
+  keep the browser for geometry, which is unaffected.
+- **How to apply:** (1) any scroll-scrub gets its travel normalised by element height; (2) measure
+  EVERY instance, not one representative — size variance is the whole failure mode; (3) express the
+  acceptance check in terms of what is ON SCREEN at each visibility milestone (0%/50%/100% visible),
+  not in terms of the constants; (4) when a media element will not load under automation, check
+  `document.visibilityState` before assuming a code fault. Pairs with Lesson 34 (measure the result),
+  35 (every surface, not the tested one).
+
+- **Amendment 2026-08-31 (same day, three failed attempts later):** the pace above was chased with
+  taste multipliers — 3x, then 2x, then 1.5x on the operator's instruction — and every one failed,
+  because **the requirement was never about speed.** He asked to "see the sketch happening"; the
+  controlling variable is WHERE IN THE SCROLL the drawing sits, not how long it takes. Chasing the
+  multiplier produced three rounds of rework and one round where I applied a number I had already
+  measured to be incompatible with his previous instruction. **When a request names a magnitude but
+  the complaint names an experience, solve for the experience and let the magnitude fall out.** Here
+  that meant stating both ends as rules — the first mark lands once the artwork is 30% risen; the
+  line finishes just past centre — and solving the window from them. It landed at 2.3x, a value no
+  amount of dial-turning had reached, and it is self-documenting: the constants say what they
+  guarantee. Corollary: **check that a new setting does not undo the fix from the previous turn** —
+  cp118 fixed the line and silently pushed the colour bloom off the bottom of the screen.
+
+### 37. A page opened from disk cannot read its own canvas back
+- **Rule:** `getImageData` / `toDataURL` THROW a SecurityError on any canvas that has had a `file://`
+  image or video drawn into it. A file:// resource is an opaque origin, so it taints the canvas
+  exactly as a cross-origin asset would. If a build is ever opened by double-clicking the HTML --
+  which is how most clients and most operators look at a static site -- no pixel-readback compositing
+  works at all. Nothing warns you: a served copy on localhost behaves perfectly.
+- **The fix is usually free:** tainting blocks READS, never WRITES. Anything expressible as canvas
+  composite operations still draws and still displays on a tainted canvas. 2026-08-31, NTF: a
+  per-pixel loop computing `film*a + white*(1-a)` was exactly `screen(film, 1-mask)`, so it collapsed
+  into two drawImage calls plus a `difference` fill to invert the mask -- verified equivalent on five
+  real frames from four clips, worst single pixel 3.8/255. That removed the file:// blocker AND the
+  page's single most expensive operation (1267ms main thread, 241MB heap while scrubbing).
+- **Reach for the identity before the loop.** screen(a,b)=1-(1-a)(1-b) is a lerp toward white;
+  multiply is a lerp toward black; destination-in is an alpha mask. Most "read pixels, do maths,
+  write pixels" code is one of these in disguise, and the composite form is GPU-side and untainted.
+- **Harness note:** the Chrome extension AND the Playwright MCP both refuse to open `file://`. Driving
+  Chrome directly over CDP does work -- launch `--headless=new --remote-debugging-port`, then a plain
+  `websockets` client (present in the system python) speaks Runtime.evaluate and
+  Page.captureScreenshot. A screenshot READS A TAINTED CANVAS FINE because the compositor is not
+  script, so when script readback is blocked, screenshot the page to prove it is painting.
+- **How to apply:** (1) ask early how the artifact will be OPENED, not just deployed -- file:// is a
+  different platform from http:// and must be tested as one; (2) prefer composite ops to pixel loops
+  by default; (3) guard fetch() fallbacks on `location.protocol === 'file:'`, where fetch is blocked
+  outright; (4) verify responsive rules by SOLVING them across several viewports rather than
+  eyeballing one -- the landscape phone, art taller than the screen, is the case that breaks.
+
+### 38. Outside Safari, iOS/iPadOS viewport units are ALL unstable
+- **Rule:** svh/lvh/dvh being "static lengths" is only true in Safari, which manages its toolbar as an
+  inset. Every third-party iOS/iPadOS browser (Chrome included) is a WKWebView that is physically
+  RESIZED when its own toolbar hides -- from the page's point of view the viewport itself changes and
+  every viewport unit re-resolves mid-scroll. A hero sized in any vh-family unit visibly grows/shrinks
+  and, with object-fit:cover, RE-CROPS its artwork as the user scrolls. Reproduced on NTF 2026-09-01:
+  a 756->820 viewport change grew the hero box + film 65px (emulated via
+  Emulation.setDeviceMetricsOverride, which models exactly this).
+- **Fix pattern:** freeze the unit in px at load -- probe 100lvh with a hidden div, take
+  max(probe, innerHeight), write --vhL custom property + a .vh-locked class on <html>; CSS consumes
+  calc(var(--vhL)*N) under html.vh-locked with the lvh rules as no-JS fallback. Re-lock ONLY on width
+  change (orientation flip) or >20% height change -- toolbar transitions are 8-13% and are ignored.
+- **Cascade trap:** the locked rule (html.vh-locked #x) outranks breakpoint rules; scope it to the
+  widths where the old unit actually applied, or it silently overrides an approved phone cascade.
+- **Adjacent:** device-width gates (max-width:640) hand an upright iPad (820px wide) the LANDSCAPE
+  asset into a portrait box; gate hero art by (orientation:portrait) instead -- and a <picture> still
+  re-selects on rotation while a JS-chosen video does NOT: pair the orientation gate with a
+  retire-on-flip teardown so the still takes over after rotating. Asked "which browser?" earlier in
+  the session ("I don't have Safari") was the diagnostic key -- ask what the client actually opens
+  the page IN, not just on.
