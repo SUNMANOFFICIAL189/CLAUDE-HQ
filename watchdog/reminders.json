@@ -64,7 +64,7 @@
     "id": "google-cloud-cost-recheck-2026-09-16",
     "fire_at": "2026-09-16T09:00:00",
     "channel": "telegram",
-    "severity": "warning",
+    "severity": "warn",
     "subject": "Check whether the Google bill actually came down",
     "body": "On 2 September we found the Google bill was \u00a320.15, and \u00a313.07 of it was the memory tool that runs alongside Claude Code. It had been left on Google's paid service and was calling it about 13,000 times a month.\n\nWe cut that down by telling it to ignore browser clicks, screenshots and waiting-for-video jobs, which was about four calls in every ten. We also switched off a FlightClub demo page that had been holding a machine open day and night since June.\n\nTwo weeks have now passed, so there is enough new data to tell whether the cut actually worked or whether more needs doing.",
     "what_to_do": "Ask Claude to run the fortnight check in the note 'project_google_cloud_bill_trace_2026_09_02'. It has the exact command and the before figures. If the memory tool is still making more than about 3,000 calls a week, the next step is already written down. If it is under, nothing more is needed."
@@ -73,7 +73,7 @@
     "id": "google-cloud-cost-recheck-2026-09-16-email",
     "fire_at": "2026-09-16T09:05:00",
     "channel": "email",
-    "severity": "warning",
+    "severity": "warn",
     "subject": "Check whether the Google bill actually came down (backup copy)",
     "body": "On 2 September we found the Google bill was \u00a320.15, and \u00a313.07 of it was the memory tool that runs alongside Claude Code. It had been left on Google's paid service and was calling it about 13,000 times a month.\n\nWe cut that down by telling it to ignore browser clicks, screenshots and waiting-for-video jobs, which was about four calls in every ten. We also switched off a FlightClub demo page that had been holding a machine open day and night since June.\n\nTwo weeks have now passed, so there is enough new data to tell whether the cut actually worked or whether more needs doing.\n\nThis is the second of two copies, sent by email in case the phone message did not arrive.",
     "what_to_do": "Ask Claude to run the fortnight check in the note 'project_google_cloud_bill_trace_2026_09_02'. It has the exact command and the before figures. If the memory tool is still making more than about 3,000 calls a week, the next step is already written down. If it is under, nothing more is needed."

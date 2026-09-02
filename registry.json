@@ -598,7 +598,7 @@
       "dependencies": [],
       "setup_instructions": {
         "method": "pip_install",
-        "command": "pip install code-review-graph && code-review-graph install",
+        "command": "pip install code-review-graph && code-review-graph install --no-hooks",
         "alternative": "claude plugin add tirth8205/code-review-graph"
       },
       "integration_notes": "Foundational token saver. Always pair with TECCP. code-review-graph handles codebase-level efficiency (which files to read), TECCP handles session-level efficiency (how to respond). Together they can reduce token usage by 80%+.",

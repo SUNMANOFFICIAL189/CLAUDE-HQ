@@ -111,7 +111,7 @@ The Commander handles complex classification via its full protocol. For quick re
 | ID | Purpose | Setup |
 |----|---------|-------|
 | `token-efficiency-repo` | Session-level token discipline | Read SKILL.md |
-| `code-review-graph` | Codebase-level token savings (6.8-49x) | `pip install code-review-graph && code-review-graph install` |
+| `code-review-graph` | Codebase-level token savings (6.8-49x) | `pip install code-review-graph && code-review-graph install --no-hooks` (plain `install` overwrites the project `.claude/settings.json` hooks block and deletes the session-end backup hook) |
 | `recall-stack` | 5-layer crash-safe memory | `git clone → bash setup.sh` |
 
 ### Knowledge & Memory

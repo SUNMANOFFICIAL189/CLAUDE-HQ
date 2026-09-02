@@ -2149,3 +2149,15 @@ new names). Paid tier RETAINED — free tier trains on client data.
 against the recorded baseline (12,975 req/30d; 3,813 chargeable observations in the final week;
 expected ~42% cut) and, if weekly requests remain above ~3,000, escalate to disabling the PostToolUse
 hook. Full method + reproduce commands in `project_google_cloud_bill_trace_2026_09_02.md`.
+
+## [Open] — 2026-09-02 — Review residuals from the 2026-09-02 cost/hook proof-check (non-blocking) + identify the settings.json writer
+
+**What:** Four items surfaced during the 2026-09-02 adversarial review of the code-review-graph install-hooks doctrine fix, filed here as non-blocking. **(1) MEDIUM** — project `.claude/settings.json` hook matcher had dropped `Bash` (contradicts COMMANDER.md Step 0.D "Edit|Write|Bash"); the file was RESTORED to HEAD on 2026-09-02. If the `--repo` path and longer timeout from the rejected rewrite are wanted, re-apply deliberately with an absolute binary path, no `>/dev/null 2>&1 || true` silencing, Bash retained, stderr kept. **(2) MEDIUM** — the rejected rewrite also set a 30-second synchronous hook timeout on every Edit/Write; decide a sane value if it's re-applied. **(3) LOW** — `scripts/cloudrun-power.sh`: the `CLOUDRUN_POWER_STATE_DIR` env override can redirect its backups/log to any path, and there is no locking, so two concurrent runs race. **(4) HIGH-1 residual (the one real unknown)** — something rewrote AND git-staged `.claude/settings.json` twice during the 2026-09-02 session; static search disproved `code_review_graph.skills.install_hooks` as the cause (its output shape differs) and found no `git add` in scripts/, watchdog/hooks/, or `~/.claude/hooks/`. Writer UNKNOWN. Tripwire fingerprint recorded at `run/settings-tripwire.txt`.
+
+**Why:** Items (1)-(3) are correctness/safety gaps worth fixing but none are blocking today. Item (4) is the one that matters: an unidentified process rewrote and staged a security-relevant file (the project hooks config) twice with no attributable actor, and until the writer is named, any future settings.json fix could be silently reverted or duplicated by the same mechanism.
+
+**Estimate:** ~1 hour.
+
+**How to start:** (1) Grep the installed `code_review_graph` Python package for EVERY code path that writes a file named settings.json — not just `install_hooks` — search for `settings.json`, `migrate`, `ensure`, `upgrade`, `hooks` in `site-packages/code_review_graph/`. (2) Check `~/.claude/settings.json`'s PostToolUse chain (`trust-gate-post.sh`, `codex-rate-limit-catcher.py`) and `watchdog/hooks/session-end.sh` for any `git add`/`git stage`. (3) If still unknown, run `sudo fs_usage -w -f filesys | grep 'claude-hq/.claude/settings.json'` during a session, or compare the tripwire sha256 after each session.
+
+**Acceptance:** the writer is named with a file:function citation, or the tripwire shows no further change across 5 sessions.

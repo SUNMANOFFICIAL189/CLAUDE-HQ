@@ -43,7 +43,13 @@ STEP 0: PROJECT BOOTSTRAP (fully automatic — no user action required)
 │
 ├── C. Connect Knowledge Layer
 │   ├── code-review-graph:
-│   │   ├── Run: code-review-graph install (configures MCP for this project)
+│   │   ├── Run: code-review-graph install --no-hooks (configures MCP for this project)
+│   │   ├── ⚠️ Always pass --no-hooks. Plain `install` overwrites this project's
+│   │   │   .claude/settings.json "hooks" block wholesale, silently deleting the
+│   │   │   session-end routine (Stop → watchdog/hooks/session-end.sh) that mines
+│   │   │   MemPalace and backs up the Obsidian vault. Proved 2026-09-02 by running
+│   │   │   install against a copy of a real settings.json. `--no-hooks` is
+│   │   │   confirmed to exist via `code-review-graph install --help`.
 │   │   └── Will auto-build graph after first code is written
 │   │
 │   ├── MemPalace:

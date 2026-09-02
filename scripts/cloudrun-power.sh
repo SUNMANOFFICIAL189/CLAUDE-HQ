@@ -50,7 +50,7 @@ need_gcloud() {
 }
 
 lookup() {  # nickname -> sets SVC PROJ REG ONMIN, or returns 1
-  local want="$1" row
+  local want="$1" row nick
   for row in "${SERVICES[@]}"; do
     IFS='|' read -r nick SVC PROJ REG ONMIN <<< "$row"
     [ "$nick" = "$want" ] && return 0
@@ -58,11 +58,21 @@ lookup() {  # nickname -> sets SVC PROJ REG ONMIN, or returns 1
   return 1
 }
 
-current_min() {  # echoes the minimum-instances number, 0 if unset
-  local m
+current_min() {  # echoes the minimum-instances number (0 if unset), or "unknown" + non-zero return if gcloud failed
+  local m rc
   m=$(gcloud run services describe "$SVC" --project="$PROJ" --region="$REG" \
         --format="value(spec.template.metadata.annotations['autoscaling.knative.dev/minScale'])" 2>/dev/null)
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    echo "unknown"
+    return 1
+  fi
   echo "${m:-0}"
+  return 0
+}
+
+cannot_tell() {
+  echo "Cannot tell — Google did not answer. Nothing was changed. Check you are signed in (gcloud auth login) and try again."
 }
 
 note() { printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M')" "$1" >> "$LOG"; }
@@ -83,7 +93,13 @@ cmd_status() {
   local row
   for row in "${SERVICES[@]}"; do
     IFS='|' read -r nick SVC PROJ REG ONMIN <<< "$row"
-    local m; m=$(current_min)
+    local m
+    if ! m=$(current_min); then
+      printf '  %-18s  ' "$nick"
+      cannot_tell
+      echo
+      continue
+    fi
     if [ "$m" = "0" ] || [ -z "$m" ]; then
       printf '  %-18s  OFF  — nothing is held open. Costs nothing while nobody visits.\n' "$nick"
       printf '  %-18s        The page still works; the first visit after a quiet spell is a little slower.\n' ""
@@ -102,17 +118,32 @@ cmd_status() {
 cmd_off() {
   need_gcloud
   lookup "$1" || { echo "Do not recognise '$1'. Run '$(basename "$0") list' to see the names."; exit 1; }
-  local before; before=$(current_min)
+  local before
+  if ! before=$(current_min); then
+    cannot_tell
+    exit 1
+  fi
   if [ "$before" = "0" ]; then
     echo "'$1' is already off. Nothing to do."
     exit 0
   fi
   echo "Switching '$1' off. The page keeps working; it just stops holding a machine open."
-  gcloud run services describe "$SVC" --project="$PROJ" --region="$REG" --format=export \
-    > "$STATE_DIR/$SVC.before-off-$(date +%Y-%m-%d-%H%M).yaml" 2>/dev/null
+  local backup_file="$STATE_DIR/$SVC.before-off-$(date +%Y-%m-%d-%H%M).yaml"
+  if ! gcloud run services describe "$SVC" --project="$PROJ" --region="$REG" --format=export \
+        > "$backup_file" 2>/dev/null || [ ! -s "$backup_file" ]; then
+    rm -f "$backup_file"
+    echo "Could not take a backup of the current settings first, so nothing was changed. Check you are signed in (gcloud auth login) and try again."
+    exit 1
+  fi
   if gcloud run services update "$SVC" --project="$PROJ" --region="$REG" --min-instances=0 --quiet >/dev/null 2>&1; then
-    echo "Done. '$1' is now off and should stop appearing on the bill."
-    note "OFF  $1 ($SVC) — minimum instances $before -> 0"
+    local after
+    if after=$(current_min) && [ "$after" = "0" ]; then
+      echo "Done. '$1' is now off and should stop appearing on the bill."
+      note "OFF  $1 ($SVC) — minimum instances $before -> 0"
+    else
+      echo "The change did not take — Google reports minimum instances = ${after:-unknown}"
+      exit 1
+    fi
   else
     echo "That did not work. Nothing was changed. Try running it again, or check you are signed in."
     exit 1
@@ -123,7 +154,11 @@ cmd_on() {
   need_gcloud
   lookup "$1" || { echo "Do not recognise '$1'. Run '$(basename "$0") list' to see the names."; exit 1; }
   local skip="${2:-}"
-  local before; before=$(current_min)
+  local before
+  if ! before=$(current_min); then
+    cannot_tell
+    exit 1
+  fi
   if [ "$before" = "$ONMIN" ]; then
     echo "'$1' is already on. Nothing to do."
     exit 0
@@ -136,8 +171,14 @@ cmd_on() {
     case "$reply" in [yY]*) ;; *) echo "Left off. Nothing changed."; exit 0 ;; esac
   fi
   if gcloud run services update "$SVC" --project="$PROJ" --region="$REG" --min-instances="$ONMIN" --quiet >/dev/null 2>&1; then
-    echo "Done. '$1' is on and answering instantly. Remember to switch it off when you are finished."
-    note "ON   $1 ($SVC) — minimum instances $before -> $ONMIN"
+    local after
+    if after=$(current_min) && [ "$after" = "$ONMIN" ]; then
+      echo "Done. '$1' is on and answering instantly. Remember to switch it off when you are finished."
+      note "ON   $1 ($SVC) — minimum instances $before -> $ONMIN"
+    else
+      echo "The change did not take — Google reports minimum instances = ${after:-unknown}"
+      exit 1
+    fi
   else
     echo "That did not work. Nothing was changed. Try running it again, or check you are signed in."
     exit 1

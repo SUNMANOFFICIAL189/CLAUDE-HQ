@@ -239,7 +239,7 @@ This session focuses on **Phase 1 + Phase 2 + Phase 3** — the knowledge layer,
 **Remaining build tasks:**
 
 15. 🔲 Run `bash setup.sh` on Mac (inject JARVIS into global ~/.claude/CLAUDE.md)
-16. 🔲 Install code-review-graph on Mac (`pip install code-review-graph && code-review-graph install`)
+16. 🔲 Install code-review-graph on Mac (`pip install code-review-graph && code-review-graph install --no-hooks`) — ⚠️ plain `install` (no flag) overwrites project `.claude/settings.json` "hooks" and deletes the session-end MemPalace/Obsidian backup routine; verified 2026-09-02.
 17. 🔲 Install graphify on Mac (`pip install graphifyy && graphify install`)
 18. 🔲 Install MemPalace on Mac (`pip install mempalace && mempalace install`)
 19. 🔲 Install claude-mem plugin in Claude Code
