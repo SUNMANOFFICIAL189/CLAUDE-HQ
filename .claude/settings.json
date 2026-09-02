@@ -2,12 +2,12 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|Bash",
+        "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "code-review-graph update --skip-flows",
-            "timeout": 5000
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/bin/code-review-graph update --repo /Users/sunil_rajput/claude-hq --skip-flows >/dev/null 2>>/Users/sunil_rajput/.claude/logs/crg-hook.err || true",
+            "timeout": 60
           }
         ]
       }
@@ -17,8 +17,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "code-review-graph status",
-            "timeout": 3000
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/bin/code-review-graph status 2>>/Users/sunil_rajput/.claude/logs/crg-hook.err || true",
+            "timeout": 15
           }
         ]
       }
@@ -29,7 +29,7 @@
           {
             "type": "command",
             "command": "/Users/sunil_rajput/claude-hq/watchdog/hooks/session-end.sh",
-            "timeout": 10000
+            "timeout": 90
           }
         ]
       }

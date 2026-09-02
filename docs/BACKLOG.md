@@ -2163,3 +2163,11 @@ hook. Full method + reproduce commands in `project_google_cloud_bill_trace_2026_
 **Acceptance:** the writer is named with a file:function citation, or the tripwire shows no further change across 5 sessions.
 **Addendum (same day) — 3 LOW notes from the blind verifier's PASS_WITH_NOTES on fix commit 091c3d4:**
 (5) `cloudrun-power.sh` `cmd_off`/`cmd_on`: if the update succeeds but the read-back `current_min` fails, the script says "did not take" — it should say "could not confirm", since the change may have landed (exit 1 and no-log are still the safe choices; only the wording over-claims). (6) `cmd_status` exits 0 even when every service reads `unknown`; any caller gating on its exit code cannot detect a total blackout. (7) pre-existing: backup filename has minute granularity, so two `off` runs in one minute overwrite the first backup. Also `nick` is still a global in `cmd_list`/`cmd_status` (only `lookup` was ticketed).
+
+## [Open] — 2026-09-02 — crg hook: two accepted LOW residuals from proof-check PASS
+
+**What:** (1) PostToolUse matcher is now `Edit|Write|MultiEdit` — file edits made via Bash (heredocs, sed, git pull) no longer refresh the code-review-graph until the next Edit/Write; round-1 reviewer suggested a SessionStart catch-up (`update --base origin/main`) to close the git-pull gap. (2) SessionStart `status` entry lacks `--repo` — started outside claude-hq it resolves whatever cwd graph it finds; add `--repo` for symmetry.
+**Why:** Both accepted knowingly at the 2026-09-02 landing of the corrected hooks (proof-check PASS, real-surface proven 0.58s in env -i). Low frequency, low harm, but permanent-staleness shaped (git pull past HEAD~1 never gets picked up).
+**Estimate:** 15 min including one proof-check re-run.
+**How to start:** edit `.claude/settings.json` SessionStart entry: add `--repo /Users/sunil_rajput/claude-hq` and optionally a second SessionStart hook `update --base origin/main --skip-flows` (absolute binary path, stderr to ~/.claude/logs/crg-hook.err, timeout 60).
+**Acceptance:** after a `git pull` advancing HEAD by 2+ commits, next session start refreshes the graph (status Last-updated advances) with no manual build.
