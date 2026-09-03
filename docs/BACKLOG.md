@@ -114,7 +114,9 @@
 
 ---
 
-## [Open] — 2026-05-06 — Fix Watchdog Telegram listener (launchd path mismatch)
+## [Done] — 2026-05-06 — Fix Watchdog Telegram listener (launchd path mismatch)
+
+**Verified DONE 2026-09-03 (Lesson 26 write-back):** `listener.err.log` last modified 2026-05-06 09:57 — no "can't open file" errors since; installed plist == repo plist, `WorkingDirectory=/Users/sunil_rajput/claude-hq`, `StartInterval=30`, `RunAtLoad=true`; `launchctl list` shows `com.claude-hq.watchdog.listener` last exit 0; `watchdog/audit.log` shows reminders ticking at 2026-09-03T01:34–01:36. Listener runs every 30 s and exits 0 by design. (Separate live issue found the same check: reminder `paperclip-watchdog-soak-end-2026-05-22` fails the jargon linter on "false p…" and retries every tick — clear or reword it.)
 
 **What:** `com.claude-hq.watchdog.listener` plist references `listener.py` but launchd can't find it ("[Errno 2] No such file or directory" repeated in `listener.err.log`). The file exists; suspect a working-directory mismatch in the plist.
 
@@ -2171,3 +2173,13 @@ hook. Full method + reproduce commands in `project_google_cloud_bill_trace_2026_
 **Estimate:** 15 min including one proof-check re-run.
 **How to start:** edit `.claude/settings.json` SessionStart entry: add `--repo /Users/sunil_rajput/claude-hq` and optionally a second SessionStart hook `update --base origin/main --skip-flows` (absolute binary path, stderr to ~/.claude/logs/crg-hook.err, timeout 60).
 **Acceptance:** after a `git pull` advancing HEAD by 2+ commits, next session start refreshes the graph (status Last-updated advances) with no manual build.
+
+## [Open] — 2026-09-03 — Hermes pilot fence: proof-check MEDIUM/LOW residuals (M9–M11, LOWs)
+
+**What:** From `run/pilot-tree/skills/hq-hermes/reviews/proof-check-2026-09-03.md`: (M9) the `DOCKER-USER` DROP rule is re-applied on every `ensure` but never re-verified mid-session — a Docker daemon restart recreates the chain without it; `detect_chain()` silently falls back to FORWARD on any ssh/sudo failure; (M10) `_hq_log_disabled` prints to stderr only — no file log/counter under `$HERMES_HOME/logs/`; (M11) second provider registry `hermes_cli/providers.py` `HERMES_OVERLAYS["anthropic"].extra_env_vars` disagrees with the guarded `PROVIDER_REGISTRY` (display-only consumers today); LOWs: `--engine` usage text, silent exit if `docker` absent, hardcoded `COLIMA_BIN`, dead `create_anthropic_message` guard, `--network host` would bypass the wall. (H1–H6 + M7–M8 are NOT here — they block via T3e.)
+**Why:** Residual hardening of a pilot fence; none is a live leak today; each becomes real if the pilot runs long-lived (Stage 2 gateway) or if a config flips.
+**Estimate:** 1–2 h (sonnet) — a re-verify step in the wrapper before each job; a file logger for the guard; unify the overlay registry; engine-script nits.
+**How to start:** read the proof-check file §MEDIUM/LOW; add a `verify-only` mode to `hermes-engine.sh` the wrapper calls before every run; make `detect_chain()` fail closed.
+**Acceptance:** wrapper refuses to run a job when `iptables -S DOCKER-USER` lacks the DROP rule; guard lines appear in `$HERMES_HOME/logs/hq-pilot.log`; `hermes_cli/providers.py` overlay guarded; LOWs fixed; re-run `/proof-check` on the engine script is clean of M9/M10/LOWs.
+**Addendum 2026-09-03 (proof-check re-run #1 LOWs):** `model_setup_flows.py:650/670` degrade to "Login failed: 'openai-codex'" (confusing, not a crash); `trap_reapply_kill` swallows a failed re-apply with `|| true`; bash defers INT/TERM traps until the foreground `docker build` returns (wall stays down for the rest of that build); `CURL_BIN` exits silently if curl is absent; `build_azure_foundry_anthropic_client` / `build_anthropic_bedrock_client` unguarded (Entra/AWS auth, no subscription credential). Record: `run/pilot-tree/skills/hq-hermes/reviews/proof-check-rerun-2026-09-03.md`.
+**Addendum 2026-09-03 (proof-check re-run #3 — CLEAN; residuals):** (R1 MEDIUM) `hermes-engine.sh` `HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE` is documented test-only but unenforced: a job env could point the digest pull/probe image at another file while the wall is down (same trust boundary as PATH-resolved `docker`/`curl`; no test uses it) → reject unless the path is under `$SK`, or gate on `HERMES_ENGINE_SELFTEST=1`. (R2 MEDIUM, accepted) the bootstrap digest pull runs in the wall-down window before the positive control. LOWs: `hermes_cli/main.py::_build_provider_choices` static fallback still lists openai-codex/copilot/copilot-acp; new upstream test casualty `tests/hermes_cli/test_provider_catalog.py:46` (+ the known `tests/tools/test_hermes_subprocess_env.py:213-227`) — pilot-rollback list; the module-level fail-closed fallbacks in `models.py:1383` / `local.py:861` are not covered by the H3 test; `_hq_pilot_*` names leak into `models.py` namespace. Record: `run/pilot-tree/skills/hq-hermes/reviews/proof-check-rerun3-2026-09-03.md`.

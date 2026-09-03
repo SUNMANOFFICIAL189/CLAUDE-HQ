@@ -1033,6 +1033,16 @@
   denial as governing every downstream ticket in the same task, not just the command they denied.
   Pairs with Lesson 1 (Trust Gate), Lesson 24 (curl is ungated), Lesson 30 (re-verify after every
   agent write).
+- **Recurrence 2026-09-03 (Hermes Agent eval) — two amendments:** (a) the brief said "never write
+  anywhere except the scratchpad path" — so four scouts obediently wrote ~50 of the subject's source
+  files (`cli.py` 1 MB, `run_agent.py`, `setup-hermes.sh`, `docker-compose.yml`…) INTO the scratchpad
+  via `gh api … > file`. "Only write to directory X" still permits landing the subject's bytes; the
+  MUST NOT has to name the BYTES: *"never save any file from the subject repo to disk, in the
+  scratchpad or anywhere; read to stdout (`| head`/`sed -n`) only; the ONLY file you may create is
+  your own report."* (b) Root cause of the skip: LESSONS.md was read TRUNCATED (rules 1–25 of 38) and
+  the scouts were dispatched before rules 26–38 — including this one — were loaded. **A truncated read
+  of LESSONS.md is not a read: page to the end before the first agent dispatch.** Remedy applied same
+  session: full sweep, 0 subject files remain; nothing was executed.
 
 ### 34. A read-back of the instruction is not a measurement of the result
 - **Rule:** An acceptance check must measure the OUTPUT, never re-read the INPUT. If a ticket asks a

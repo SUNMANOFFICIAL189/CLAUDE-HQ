@@ -48,6 +48,13 @@ on Opus and skip this section.
 1. **Propose, never auto-invoke (Lesson 17).** Tell the operator: what the
    Fable dispatch is for, the brief size, and the cost estimate (soft cap
    ≤30k input tokens ≈ $0.30 in; ≲$0.50 total with output). Wait for yes.
+   **Measured 2026-09-03:** a ~12k-token brief dispatched through the `Agent`
+   tool (`general-purpose`, instructed "no tools, one reply") cost **94,916
+   tokens total (≈ $1.0–1.4)** — the tool prepends the agent's system prompt +
+   full tool-schema block (~50–80k tokens) regardless. **Quote ≥ $1.00 per
+   consult**, not $0.50, until a tools-less dispatch path exists; write the
+   real `subagent_tokens` from the task notification into the ledger row
+   (`fable-spend.sh` cannot see tokens on its own).
 2. On yes, **mint a fresh nonce** (a short unique string, e.g. today's date +
    4 random chars) and dispatch with `model: "claude-fable-5"` AND the token
    `FABLE-OK:<nonce>` in the prompt — the router DENIES metered-Fable dispatches
