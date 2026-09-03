@@ -1,0 +1,2053 @@
+diff --git a/agent/anthropic_adapter.py b/agent/anthropic_adapter.py
+index ebdb5cf..551e4d2 100644
+--- a/agent/anthropic_adapter.py
++++ b/agent/anthropic_adapter.py
+@@ -88,9 +88,11 @@ from agent.anthropic_credentials import (  # noqa: F401
+     _OAUTH_TOKEN_URLS,
+     _OAUTH_TOKEN_USER_AGENT,
+     CredentialPersistError,
++    HQ_PILOT_ANTHROPIC_DISABLED,
+     _generate_pkce,
+     _get_hermes_oauth_file,
+     _getenv,
++    _hq_log_disabled,
+     _is_oauth_token,
+     _prefer_refreshable_claude_code_token,
+     _read_claude_code_credentials_from_file,
+@@ -112,6 +114,13 @@ from agent.anthropic_credentials import (  # noqa: F401
+     run_oauth_setup_token,
+ )
+ 
++# HQ pilot T3e 2026-09-03: HQ_PILOT_ANTHROPIC_DISABLED / _hq_log_disabled used
++# to be redefined locally here AND in agent/credential_pool.py — three
++# independent copies of the same flag (proof-check-2026-09-03.md M7): a
++# partial flip of one copy silently produced a half-open fence with no error.
++# agent/anthropic_credentials.py is now the single source of truth; both
++# names are imported above, re-exported (noqa: F401) for existing callers.
++
+ try:
+     import hermes_cli as _hermes_cli
+ 
+@@ -495,6 +504,9 @@ def _detect_claude_code_version() -> str:
+     reject requests with a version that's too old.  Detecting dynamically means
+     users who keep Claude Code updated never hit stale-version 400s.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_detect_claude_code_version")
++        raise RuntimeError("HQ pilot: Anthropic OAuth disabled")
+     import subprocess as _sp
+ 
+     for cmd in ("claude", "claude-code"):
+@@ -519,6 +531,9 @@ _MCP_TOOL_PREFIX = "mcp__"
+ 
+ def _get_claude_code_version() -> str:
+     """Lazily detect the installed Claude Code version when OAuth headers need it."""
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_get_claude_code_version")
++        raise RuntimeError("HQ pilot: Anthropic OAuth disabled")
+     global _claude_code_version_cache
+     if _claude_code_version_cache is None:
+         _claude_code_version_cache = _detect_claude_code_version()
+@@ -674,6 +689,18 @@ def build_anthropic_client(
+ 
+     Returns an anthropic.Anthropic instance.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        # HQ pilot H1 fix (proof-check-2026-09-03.md): guard at the TOP of the
++        # function, before any endpoint/kimi/bearer/third-party branching. The
++        # guard used to sit on the LAST branch of the five-way chain below
++        # (_is_kimi_coding_endpoint -> _requires_bearer_auth ->
++        # _is_third_party_anthropic_endpoint -> elif _is_oauth_token(api_key)),
++        # so an OAuth-shaped token routed through any earlier branch (a
++        # third-party base_url, a bearer-auth endpoint, ...) reached a live
++        # client silently.
++        _hq_log_disabled("build_anthropic_client")
++        raise RuntimeError("HQ pilot: Anthropic client disabled")
++
+     _anthropic_sdk = _get_anthropic_sdk()
+     if _anthropic_sdk is None:
+         raise ImportError(
+@@ -756,6 +783,9 @@ def build_anthropic_client(
+         if common_betas:
+             kwargs["default_headers"] = {"anthropic-beta": ",".join(common_betas)}
+     elif _is_oauth_token(api_key):
++        # HQ pilot: the function-top guard above already raises while
++        # HQ_PILOT_ANTHROPIC_DISABLED is True, so this branch is unreachable
++        # during the pilot; no separate check needed here (single guard site).
+         # OAuth access token / setup-token → Bearer auth + Claude Code identity.
+         # Anthropic routes OAuth requests based on user-agent and headers;
+         # without Claude Code's fingerprint, requests get intermittent 500s.
+@@ -918,6 +948,9 @@ def build_anthropic_kwargs(
+ 
+     # ── OAuth: Claude Code identity ──────────────────────────────────
+     if is_oauth:
++        if HQ_PILOT_ANTHROPIC_DISABLED:
++            _hq_log_disabled("build_anthropic_kwargs (oauth branch: Claude Code identity injection)")
++            raise RuntimeError("HQ pilot: Anthropic OAuth disabled")
+         # 1. Prepend Claude Code system prompt identity
+         cc_block = {"type": "text", "text": _CLAUDE_CODE_SYSTEM_PREFIX}
+         if isinstance(system, list):
+@@ -1172,6 +1205,15 @@ def create_anthropic_message(
+     in particular. Only fires on the streaming path, which is the one the main
+     turn loop takes.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        # HQ pilot: previously conditioned on the Claude Code identity
++        # payload showing up in `system` -- effectively dead since
++        # build_anthropic_client already refuses to construct a client while
++        # the guard is on (proof-check-2026-09-03.md LOW findings). Guard
++        # unconditionally, first statement, for defense in depth: a caller
++        # that somehow obtains a pre-built client must still be refused here.
++        _hq_log_disabled("create_anthropic_message")
++        raise RuntimeError("HQ pilot: Anthropic client disabled")
+     sanitize_anthropic_kwargs(api_kwargs, log_prefix=log_prefix)
+ 
+     messages_api = getattr(client, "messages", None)
+diff --git a/agent/anthropic_credentials.py b/agent/anthropic_credentials.py
+index a40cdcb..e3c64ac 100644
+--- a/agent/anthropic_credentials.py
++++ b/agent/anthropic_credentials.py
+@@ -41,6 +41,13 @@ from agent.secret_scope import get_secret as _get_secret
+ 
+ logger = logging.getLogger(__name__)
+ 
++HQ_PILOT_ANTHROPIC_DISABLED = True  # HQ pilot T3b 2026-09-03: Anthropic/Claude-Code credential sources neutralised; flip to False to restore upstream behaviour
++
++
++def _hq_log_disabled(name: str) -> None:
++    import sys
++    print(f"HQ pilot: Anthropic credential source disabled: {name}", file=sys.stderr)
++
+ 
+ def _getenv(name: str, default: str = "") -> str:
+     """Profile-scoped replacement for os.getenv on credential reads.
+@@ -274,6 +281,9 @@ def _read_claude_code_credentials_from_keychain() -> Optional[Dict[str, Any]]:
+ 
+     Returns dict with {accessToken, refreshToken?, expiresAt?} or None.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_read_claude_code_credentials_from_keychain")
++        return None
+     if platform.system() != "Darwin":
+         return None
+ 
+@@ -337,6 +347,9 @@ def _read_claude_code_credentials_from_file() -> Optional[Dict[str, Any]]:
+ 
+     Returns dict with {accessToken, refreshToken?, expiresAt?, source} or None.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_read_claude_code_credentials_from_file")
++        return None
+     cred_path = claude_code_credentials_path()
+     if not cred_path.exists():
+         return None
+@@ -381,6 +394,9 @@ def read_claude_code_credentials() -> Optional[Dict[str, Any]]:
+ 
+     Returns dict with {accessToken, refreshToken?, expiresAt?, source} or None.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("read_claude_code_credentials")
++        return None
+     kc_creds = _read_claude_code_credentials_from_keychain()
+     file_creds = _read_claude_code_credentials_from_file()
+ 
+@@ -417,6 +433,9 @@ def is_claude_code_token_valid(creds: Dict[str, Any]) -> bool:
+ 
+ def refresh_anthropic_oauth_pure(refresh_token: str, *, use_json: bool = False) -> Dict[str, Any]:
+     """Refresh an Anthropic OAuth token without mutating local credential files."""
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("refresh_anthropic_oauth_pure")
++        raise RuntimeError("HQ pilot: Anthropic OAuth disabled")
+     import time
+     import urllib.parse
+     import urllib.request
+@@ -493,6 +512,9 @@ def _refresh_oauth_token(creds: Dict[str, Any]) -> Optional[str]:
+     has already produced a valid token, adopt it and skip the POST entirely.
+     Only fall back to refreshing ourselves when no fresh credential is found.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_refresh_oauth_token")
++        raise RuntimeError("HQ pilot: Anthropic OAuth disabled")
+     # Claude Code may have already refreshed — adopt its token rather than
+     # racing it with our (possibly already-rotated) refresh token. The read,
+     # decision, POST, and write-back all belong to the shared credentials
+@@ -620,6 +642,9 @@ def _write_claude_code_credentials(
+     pre-rotation pair on disk to be re-seeded and replayed (see
+     ``CredentialPersistError``).
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_write_claude_code_credentials")
++        raise RuntimeError("HQ pilot: Anthropic OAuth disabled")
+     cred_path = claude_code_credentials_path()
+     try:
+         # Read existing file to preserve other fields
+@@ -680,6 +705,9 @@ def _write_claude_code_credentials(
+ 
+ def _resolve_claude_code_token_from_credentials(creds: Optional[Dict[str, Any]] = None) -> Optional[str]:
+     """Resolve a token from Claude Code credential files, refreshing if needed."""
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_resolve_claude_code_token_from_credentials")
++        return None
+     creds = creds or read_claude_code_credentials()
+     if creds and is_rotation_consumed_uncommitted(
+         creds.get("accessToken", ""), source_path=claude_code_credentials_path()
+@@ -712,6 +740,9 @@ def _prefer_refreshable_claude_code_token(env_token: str, creds: Optional[Dict[s
+     inspect Claude Code's refreshable credential file. If we have a refreshable
+     Claude Code credential record, prefer it over the static env OAuth token.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_prefer_refreshable_claude_code_token")
++        return None
+     if not env_token or not _is_oauth_token(env_token) or not isinstance(creds, dict):
+         return None
+     if not creds.get("refreshToken"):
+@@ -735,6 +766,9 @@ def _resolve_anthropic_pool_token() -> Optional[str]:
+     or makes a network refresh call. Refresh-on-expiry is owned by the API call
+     path's pool recovery, not the resolver.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_resolve_anthropic_pool_token")
++        return None
+     try:
+         from agent.credential_pool import AUTH_TYPE_OAUTH, load_pool
+     except Exception:
+@@ -799,6 +833,9 @@ def resolve_anthropic_token() -> Optional[str]:
+ 
+     Returns the token string or None.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("resolve_anthropic_token")
++        return None
+     creds: Optional[Dict[str, Any]] = None
+     creds_loaded = False
+ 
+@@ -854,6 +891,9 @@ def run_oauth_setup_token() -> Optional[str]:
+     Returns the token string, or None if no credentials were obtained.
+     Raises FileNotFoundError if the 'claude' CLI is not installed.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("run_oauth_setup_token")
++        raise RuntimeError("HQ pilot: Anthropic OAuth disabled")
+     import shutil
+     import subprocess
+ 
+@@ -932,6 +972,9 @@ def _generate_pkce() -> tuple:
+ 
+ def run_hermes_oauth_login_pure() -> Optional[Dict[str, Any]]:
+     """Run Hermes-native OAuth PKCE flow and return credential state."""
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("run_hermes_oauth_login_pure")
++        raise RuntimeError("HQ pilot: Anthropic OAuth disabled")
+     import secrets
+     import time
+     import webbrowser
+@@ -1062,6 +1105,9 @@ def run_hermes_oauth_login_pure() -> Optional[Dict[str, Any]]:
+ 
+ def read_hermes_oauth_credentials() -> Optional[Dict[str, Any]]:
+     """Read Hermes-managed OAuth credentials from ~/.hermes/.anthropic_oauth.json."""
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("read_hermes_oauth_credentials")
++        return None
+     oauth_file = _get_hermes_oauth_file()
+     if oauth_file.exists():
+         try:
+@@ -1090,6 +1136,9 @@ def _write_hermes_oauth_credentials(
+     file, for the same reason ``_write_claude_code_credentials`` does: this is
+     the commit step of the refresh transaction.
+     """
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_write_hermes_oauth_credentials")
++        raise RuntimeError("HQ pilot: Anthropic OAuth disabled")
+     oauth_file = _get_hermes_oauth_file()
+     try:
+         oauth_data = {
+diff --git a/agent/auxiliary_client.py b/agent/auxiliary_client.py
+index 8901747..d088a02 100644
+--- a/agent/auxiliary_client.py
++++ b/agent/auxiliary_client.py
+@@ -4117,6 +4117,15 @@ def _try_azure_foundry(
+ 
+ 
+ def _try_anthropic(explicit_api_key: str = None) -> Tuple[Optional[Any], Optional[str]]:
++    # HQ pilot H1 fix (proof-check-2026-09-03.md): guard first, before any of
++    # the resolver/client-construction machinery below. resolve_anthropic_token()
++    # and build_anthropic_client() are already guarded, but this is the native
++    # Anthropic aux route the reviewer named explicitly -- fail loud here too
++    # instead of relying on those inner guards alone.
++    from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_try_anthropic")
++        raise RuntimeError("HQ pilot: Anthropic client disabled")
+     try:
+         from agent.anthropic_adapter import build_anthropic_client, resolve_anthropic_token
+     except ImportError:
+diff --git a/agent/copilot_acp_client.py b/agent/copilot_acp_client.py
+index a547895..be9c79c 100644
+--- a/agent/copilot_acp_client.py
++++ b/agent/copilot_acp_client.py
+@@ -394,6 +394,14 @@ class CopilotACPClient:
+         return completion
+ 
+     def _run_prompt(self, prompt_text: str, *, timeout_seconds: float) -> tuple[str, str]:
++        # HQ pilot H4 fix (proof-check-2026-09-03.md): this is the spawn
++        # entry point for the copilot ACP subprocess -- guard first, before
++        # the support probe or any subprocess construction below.
++        from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled
++        if HQ_PILOT_ANTHROPIC_DISABLED:
++            _hq_log_disabled("CopilotACPClient._run_prompt")
++            raise RuntimeError("HQ pilot: subscription-reuse provider disabled")
++
+         # Fast-fail when the CLI doesn't support the ACP args we'd pass.
+         # Without this guard, a CLI like Claude Code v2.x exits with
+         # ``error: unknown option '--acp'`` immediately, then the parent
+diff --git a/agent/credential_pool.py b/agent/credential_pool.py
+index 8eca174..243816b 100644
+--- a/agent/credential_pool.py
++++ b/agent/credential_pool.py
+@@ -22,6 +22,10 @@ from agent.credential_persistence import (
+     is_borrowed_credential_source,
+     sanitize_borrowed_credential_payload,
+ )
++from agent.anthropic_credentials import (  # noqa: F401
++    HQ_PILOT_ANTHROPIC_DISABLED,
++    _hq_log_disabled,
++)
+ import hermes_cli.auth as auth_mod
+ from hermes_cli.auth import (
+     CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS,
+@@ -45,6 +49,12 @@ from hermes_cli.auth import (
+ 
+ logger = logging.getLogger(__name__)
+ 
++# HQ pilot T3e 2026-09-03: HQ_PILOT_ANTHROPIC_DISABLED / _hq_log_disabled used
++# to be redefined locally here (and in agent/anthropic_adapter.py) -- three
++# independent copies of the same flag (proof-check-2026-09-03.md M7): a
++# partial flip of one copy silently produced a half-open fence with no error.
++# agent/anthropic_credentials.py is now the single source of truth.
++
+ 
+ def _load_config_safe() -> Optional[dict]:
+     """Load config.yaml read-only, returning None on any error.
+@@ -3365,6 +3375,19 @@ def _seed_from_env(provider: str, entries: List[PooledCredential]) -> Tuple[bool
+         ]
+ 
+     for env_var in env_vars:
++        if (
++            HQ_PILOT_ANTHROPIC_DISABLED
++            and provider == "anthropic"
++            and env_var in ("ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
++        ):
++            # These two env vars are the Hermes-managed and Claude-Code-borrowed
++            # OAuth/setup-token sources (see agent/anthropic_credentials.py).
++            # Seeding either into the persisted pool store is exactly the
++            # "read a Claude Code / Anthropic OAuth credential" this pilot
++            # fence disables. ANTHROPIC_API_KEY (a plain, explicit API key)
++            # is intentionally NOT skipped here.
++            _hq_log_disabled(f"_seed_from_env anthropic {env_var}")
++            continue
+         # Prefer ~/.hermes/.env over os.environ
+         token = _get_env_prefer_dotenv(env_var)
+         if not token:
+diff --git a/agent/transports/codex_app_server.py b/agent/transports/codex_app_server.py
+index c23ff83..87452a5 100644
+--- a/agent/transports/codex_app_server.py
++++ b/agent/transports/codex_app_server.py
+@@ -75,6 +75,15 @@ class CodexAppServerClient:
+         extra_args: Optional[list[str]] = None,
+         env: Optional[dict[str, str]] = None,
+     ) -> None:
++        # HQ pilot H4 fix (proof-check-2026-09-03.md): this is the spawn
++        # entry point for the codex subprocess -- guard first, before any
++        # env/arg construction, so the pilot cannot start a Codex child even
++        # if a caller reaches this class directly (bypassing PROVIDER_REGISTRY).
++        from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled
++        if HQ_PILOT_ANTHROPIC_DISABLED:
++            _hq_log_disabled("CodexAppServerClient.__init__")
++            raise RuntimeError("HQ pilot: subscription-reuse provider disabled")
++
+         self._codex_bin = codex_bin
+         # codex app-server is a model-driving CLI executor: it runs a
+         # model-chosen agentic loop that executes shell commands, so it
+diff --git a/hermes_cli/auth.py b/hermes_cli/auth.py
+index 963fe06..a47a56d 100644
+--- a/hermes_cli/auth.py
++++ b/hermes_cli/auth.py
+@@ -605,6 +605,24 @@ try:
+ except Exception:
+     pass
+ 
++# HQ pilot H4 fix (proof-check-2026-09-03.md): T3 removed the plugin dirs for
++# these subscription-reuse providers but left their PROVIDER_REGISTRY entries
++# and device-code login flows reachable -- "hermes doctor" still printed
++# "OpenAI Codex auth (not logged in)" and `hermes auth add openai-codex`
++# still worked. While the pilot guard is on, remove them from the registry
++# at import time (after every population path above has run) so nothing
++# downstream (doctor, auth add, resolve_provider_client) can find them.
++# Fail CLOSED on import failure: assume disabled, remove the entries anyway.
++try:
++    from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED as _hq_pilot_disabled_for_registry
++except ImportError:  # pragma: no cover
++    print("HQ pilot: guard import FAILED — failing CLOSED", file=sys.stderr)
++    _hq_pilot_disabled_for_registry = True
++
++if _hq_pilot_disabled_for_registry:
++    for _hq_pilot_removed_provider in ("openai-codex", "copilot", "copilot-acp"):
++        PROVIDER_REGISTRY.pop(_hq_pilot_removed_provider, None)
++
+ 
+ # =============================================================================
+ # Anthropic Key Helper
+@@ -623,7 +641,20 @@ def get_anthropic_key() -> str:
+     """
+     from hermes_cli.config import get_env_value_prefer_dotenv
+ 
++    # HQ pilot T3d 2026-09-03: never surface Claude-Code/OAuth-shaped tokens
++    # while the pilot guard is on (mirrors agent/anthropic_credentials.py).
++    try:
++        from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled
++    except ImportError:  # pragma: no cover
++        # HQ pilot H3 fix (proof-check-2026-09-03.md): fail CLOSED, not open.
++        print("HQ pilot: guard import FAILED — failing CLOSED", file=sys.stderr)
++        HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled = True, (lambda _n: None)  # type: ignore
++    _hq_skip = {"ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"} if HQ_PILOT_ANTHROPIC_DISABLED else set()
++
+     for var in PROVIDER_REGISTRY["anthropic"].api_key_env_vars:
++        if var in _hq_skip:
++            _hq_log_disabled(f"get_anthropic_key skip {var}")
++            continue
+         value = get_env_value_prefer_dotenv(var) or ""
+         if value:
+             return value
+@@ -8053,6 +8084,10 @@ def _login_openai_codex(
+     force_new_login: bool = False,
+ ) -> None:
+     """OpenAI Codex login via device code flow. Tokens stored in ~/.hermes/auth.json."""
++    from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_login_openai_codex")
++        raise RuntimeError("HQ pilot: subscription-reuse provider disabled")
+ 
+     del args, pconfig  # kept for parity with other provider login helpers
+ 
+@@ -8375,6 +8410,11 @@ def _xai_oauth_device_code_login(
+ 
+ def _codex_device_code_login() -> Dict[str, Any]:
+     """Run the OpenAI device code login flow and return credentials dict."""
++    from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_codex_device_code_login")
++        raise RuntimeError("HQ pilot: subscription-reuse provider disabled")
++
+     import time as _time
+ 
+     issuer = "https://auth.openai.com"
+diff --git a/hermes_cli/doctor.py b/hermes_cli/doctor.py
+index 1af14d3..b3ce676 100644
+--- a/hermes_cli/doctor.py
++++ b/hermes_cli/doctor.py
+@@ -1918,6 +1918,7 @@ def run_doctor(args):
+             get_nous_auth_status_local,
+             get_codex_auth_status,
+             get_minimax_oauth_auth_status,
++            PROVIDER_REGISTRY,
+         )
+ 
+         # Read-only display: refresh-free snapshot — doctor must never
+@@ -1928,23 +1929,29 @@ def run_doctor(args):
+         else:
+             check_warn("Nous Portal auth", "(not logged in)")
+ 
+-        codex_status = get_codex_auth_status()
+-        if codex_status.get("logged_in"):
+-            check_ok("OpenAI Codex auth", "(logged in)")
+-        else:
+-            check_warn("OpenAI Codex auth", "(not logged in)")
+-            if codex_status.get("error"):
+-                check_info(codex_status["error"])
+-            # Native OAuth uses Hermes' own device-code flow — the Codex CLI is
+-            # only needed to import existing tokens from ~/.codex/auth.json.
+-            # Attach the hint to the Codex auth row so it doesn't read as
+-            # remediation for whichever provider happens to print next (#27975).
+-            if not _safe_which("codex"):
+-                check_info(
+-                    "codex CLI not installed "
+-                    "(optional — only required to import tokens "
+-                    "from an existing Codex CLI login)"
+-                )
++        # HQ pilot H4 fix (proof-check-2026-09-03.md): openai-codex is popped
++        # from PROVIDER_REGISTRY while the Anthropic/Claude-Code credential
++        # fence is on (hermes_cli/auth.py, after the registry is built) —
++        # skip the row entirely instead of printing a misleading "not logged
++        # in" for a provider the pilot cannot reach.
++        if "openai-codex" in PROVIDER_REGISTRY:
++            codex_status = get_codex_auth_status()
++            if codex_status.get("logged_in"):
++                check_ok("OpenAI Codex auth", "(logged in)")
++            else:
++                check_warn("OpenAI Codex auth", "(not logged in)")
++                if codex_status.get("error"):
++                    check_info(codex_status["error"])
++                # Native OAuth uses Hermes' own device-code flow — the Codex CLI is
++                # only needed to import existing tokens from ~/.codex/auth.json.
++                # Attach the hint to the Codex auth row so it doesn't read as
++                # remediation for whichever provider happens to print next (#27975).
++                if not _safe_which("codex"):
++                    check_info(
++                        "codex CLI not installed "
++                        "(optional — only required to import tokens "
++                        "from an existing Codex CLI login)"
++                    )
+ 
+         minimax_status = get_minimax_oauth_auth_status()
+         if minimax_status.get("logged_in"):
+@@ -2808,6 +2815,18 @@ def run_doctor(args):
+             )
+ 
+     def _probe_anthropic() -> _ConnectivityResult:
++        # HQ pilot NEW-2 fix (proof-check-rerun-2026-09-03.md): an
++        # OAuth-shaped value in ANTHROPIC_API_KEY/.env rode through this probe
++        # even with the H1 fence up, because H1 guards the outbound client
++        # builders, not this raw-httpx connectivity check. Guard first
++        # statement, before get_anthropic_key() or any header construction,
++        # and return the same empty/no-op row the function already returns
++        # for "no key configured" — this probe has nothing useful to report
++        # while Anthropic credential sources are neutralised.
++        from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled
++        if HQ_PILOT_ANTHROPIC_DISABLED:
++            _hq_log_disabled("_probe_anthropic")
++            return _ConnectivityResult("Anthropic API", [], [])
+         from hermes_cli.auth import get_anthropic_key
+         key = get_anthropic_key()
+         if not key:
+diff --git a/hermes_cli/model_setup_flows.py b/hermes_cli/model_setup_flows.py
+index fbb6f35..4d3e79e 100644
+--- a/hermes_cli/model_setup_flows.py
++++ b/hermes_cli/model_setup_flows.py
+@@ -1818,7 +1818,14 @@ def _model_flow_copilot(config, current_model=""):
+     )
+ 
+     provider_id = "copilot"
+-    pconfig = PROVIDER_REGISTRY[provider_id]
++    # HQ pilot NEW-1 fix (proof-check-rerun-2026-09-03.md): the registry pops
++    # "copilot" while the Anthropic/Claude-Code fence is on (hermes_cli/auth.py's
++    # HQ_PILOT_ANTHROPIC_DISABLED pop block). A hard subscript here raised
++    # KeyError instead of a clear refusal -- .get() + refuse before anything
++    # below reads the (now-missing) entry.
++    pconfig = PROVIDER_REGISTRY.get(provider_id)
++    if pconfig is None:
++        raise RuntimeError("HQ pilot: provider 'copilot' is disabled during the pilot")
+ 
+     creds = resolve_api_key_provider_credentials(provider_id)
+     api_key = creds.get("api_key", "")
+@@ -2017,7 +2024,14 @@ def _model_flow_copilot_acp(config, current_model=""):
+     del config
+ 
+     provider_id = "copilot-acp"
+-    pconfig = PROVIDER_REGISTRY[provider_id]
++    # HQ pilot NEW-1 fix (proof-check-rerun-2026-09-03.md): the registry pops
++    # "copilot-acp" while the Anthropic/Claude-Code fence is on (hermes_cli/auth.py's
++    # HQ_PILOT_ANTHROPIC_DISABLED pop block). A hard subscript here raised
++    # KeyError instead of a clear refusal -- .get() + refuse before anything
++    # below reads the (now-missing) entry.
++    pconfig = PROVIDER_REGISTRY.get(provider_id)
++    if pconfig is None:
++        raise RuntimeError("HQ pilot: provider 'copilot-acp' is disabled during the pilot")
+ 
+     status = get_external_process_provider_status(provider_id)
+     resolved_command = (
+diff --git a/hermes_cli/models.py b/hermes_cli/models.py
+index eac78f4..4482ea7 100644
+--- a/hermes_cli/models.py
++++ b/hermes_cli/models.py
+@@ -1365,6 +1365,31 @@ try:
+ except Exception:
+     pass
+ 
++# HQ pilot NEW-1 fix (proof-check-rerun-2026-09-03.md): the three
++# subscription-reuse rows below correspond to providers popped from
++# PROVIDER_REGISTRY while the Anthropic/Claude-Code fence is on
++# (hermes_cli/auth.py's HQ_PILOT_ANTHROPIC_DISABLED pop block, mirrored
++# here). Leaving them in CANONICAL_PROVIDERS let the `hermes model` picker
++# advertise a provider PROVIDER_REGISTRY no longer has, so selecting one
++# hit the hard-subscript KeyError fixed alongside this at the
++# runtime_provider.py / model_setup_flows.py call sites. Prune the same
++# three slugs here so the picker (and every other CANONICAL_PROVIDERS
++# consumer -- inventory, provider_catalog, --provider choices) never
++# offers them, same as doctor.py's Codex-row skip. Fail CLOSED on import
++# failure: assume disabled, prune anyway.
++try:
++    from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED as _hq_pilot_disabled_for_canonical
++except ImportError:  # pragma: no cover
++    import sys as _hq_pilot_sys
++    print("HQ pilot: guard import FAILED — failing CLOSED", file=_hq_pilot_sys.stderr)
++    _hq_pilot_disabled_for_canonical = True
++
++if _hq_pilot_disabled_for_canonical:
++    _hq_pilot_removed_canonical_slugs = {"openai-codex", "copilot", "copilot-acp"}
++    CANONICAL_PROVIDERS[:] = [
++        p for p in CANONICAL_PROVIDERS if p.slug not in _hq_pilot_removed_canonical_slugs
++    ]
++
+ # Derived dicts — used throughout the codebase
+ _PROVIDER_LABELS = {p.slug: p.label for p in CANONICAL_PROVIDERS}
+ _PROVIDER_LABELS["custom"] = "Custom endpoint"  # special case: not a named provider
+diff --git a/hermes_cli/runtime_provider.py b/hermes_cli/runtime_provider.py
+index b663a92..a584a4a 100644
+--- a/hermes_cli/runtime_provider.py
++++ b/hermes_cli/runtime_provider.py
+@@ -551,12 +551,20 @@ def _resolve_runtime_from_pool_entry(
+         api_mode = nous_api_mode(effective_model)
+         base_url = _nous_inference_base_url_override() or base_url
+     elif provider == "copilot":
++        # HQ pilot NEW-1 fix (proof-check-rerun-2026-09-03.md): the registry
++        # pops "copilot" while the Anthropic/Claude-Code fence is on (see
++        # hermes_cli/auth.py's HQ_PILOT_ANTHROPIC_DISABLED pop block). A hard
++        # subscript here would raise KeyError instead of a clear refusal —
++        # use .get() and refuse explicitly before touching the entry.
++        _copilot_pconfig = PROVIDER_REGISTRY.get("copilot")
++        if _copilot_pconfig is None:
++            raise RuntimeError("HQ pilot: provider 'copilot' is disabled during the pilot")
+         api_mode = _copilot_runtime_api_mode(
+             model_cfg,
+             getattr(entry, "runtime_api_key", ""),
+             target_model=effective_model,
+         )
+-        base_url = base_url or PROVIDER_REGISTRY["copilot"].inference_base_url
++        base_url = base_url or _copilot_pconfig.inference_base_url
+     elif provider == "azure-foundry":
+         # Azure Foundry: read api_mode and base_url from config
+         cfg_provider = str(model_cfg.get("provider") or "").strip().lower()
+diff --git a/hermes_cli/web_server.py b/hermes_cli/web_server.py
+index 52a8f05..0e80e36 100644
+--- a/hermes_cli/web_server.py
++++ b/hermes_cli/web_server.py
+@@ -10919,6 +10919,17 @@ def _anthropic_oauth_status() -> Dict[str, Any]:
+     ``_claude_code_only_status``). Reporting it under the API-key entry
+     double-counts the token and shadows a real ANTHROPIC_API_KEY.
+     """
++    # HQ pilot T3c 2026-09-03: dashboard must not preview Anthropic/Claude-Code
++    # credentials while the pilot guard is on (mirrors agent/anthropic_credentials.py).
++    try:
++        from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled
++    except ImportError:  # pragma: no cover
++        # HQ pilot H3 fix (proof-check-2026-09-03.md): fail CLOSED, not open.
++        print("HQ pilot: guard import FAILED — failing CLOSED", file=sys.stderr)
++        HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled = True, (lambda _n: None)  # type: ignore
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_anthropic_oauth_status (dashboard preview)")
++        return {"logged_in": False, "source": None}
+     try:
+         from agent.anthropic_adapter import (
+             read_hermes_oauth_credentials,
+@@ -10984,6 +10995,17 @@ def _claude_code_only_status() -> Dict[str, Any]:
+     Claude Code subscription tokens are actively flowing into Hermes even
+     when they also have a separate Hermes-managed PKCE login.
+     """
++    # HQ pilot T3c 2026-09-03: explicit guard (read_claude_code_credentials is
++    # already neutralised upstream; this makes the dashboard path self-evidently inert).
++    try:
++        from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled
++    except ImportError:  # pragma: no cover
++        # HQ pilot H3 fix (proof-check-2026-09-03.md): fail CLOSED, not open.
++        print("HQ pilot: guard import FAILED — failing CLOSED", file=sys.stderr)
++        HQ_PILOT_ANTHROPIC_DISABLED, _hq_log_disabled = True, (lambda _n: None)  # type: ignore
++    if HQ_PILOT_ANTHROPIC_DISABLED:
++        _hq_log_disabled("_claude_code_only_status (dashboard preview)")
++        return {"logged_in": False, "source": None}
+     try:
+         from agent.anthropic_adapter import read_claude_code_credentials
+         creds = read_claude_code_credentials()
+diff --git a/plugins/image_gen/openai-codex/__init__.py b/plugins/image_gen/openai-codex/__init__.py
+deleted file mode 100644
+index 9823425..0000000
+--- a/plugins/image_gen/openai-codex/__init__.py
++++ /dev/null
+@@ -1,770 +0,0 @@
+-"""OpenAI image generation backend — ChatGPT/Codex OAuth variant.
+-
+-Identical model catalog and tier semantics to the ``openai`` image-gen plugin
+-(``gpt-image-2`` at low/medium/high quality), but routes the request through
+-the Codex Responses API ``image_generation`` tool instead of the
+-``images.generate`` REST endpoint. This lets users who are already
+-authenticated with Codex/ChatGPT generate images without configuring a
+-separate ``OPENAI_API_KEY``.
+-
+-Selection precedence for the tier (first hit wins):
+-
+-1. ``OPENAI_IMAGE_MODEL`` env var (escape hatch for scripts / tests)
+-2. ``image_gen.openai-codex.model`` in ``config.yaml``
+-3. ``image_gen.model`` in ``config.yaml`` (when it's one of our tier IDs)
+-4. :data:`DEFAULT_MODEL` — ``gpt-image-2-medium``
+-
+-Output is saved as PNG under ``$HERMES_HOME/cache/images/``. Source images for
+-image-to-image/editing are sent as Responses ``input_image`` content parts.
+-"""
+-
+-from __future__ import annotations
+-
+-import base64
+-import json
+-import logging
+-import os
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional, Tuple
+-
+-from agent.image_gen_provider import (
+-    DEFAULT_ASPECT_RATIO,
+-    ImageGenProvider,
+-    error_response,
+-    normalize_reference_images,
+-    resolve_aspect_ratio,
+-    save_b64_image,
+-    success_response,
+-)
+-
+-logger = logging.getLogger(__name__)
+-
+-
+-# NOTE: do NOT reintroduce an "account capability" classifier keyed on
+-# ``Tool choice 'image_generation' not found in 'tools' parameter``. That HTTP
+-# 400 is a *request-shape* rejection (the Codex backend resolves tool_choice as
+-# a function-tool name and never recognizes hosted-tool entries) — it is
+-# emitted for every account, including accounts where image generation works.
+-# A previous version of this file translated that 400 into "Image generation is
+-# not enabled for the current Codex account. Switch the image provider to
+-# OpenAI API key, FAL, or xAI.", which reported a universal bug in our own
+-# payload as the user's entitlement problem and sent people away from a
+-# provider that was never actually tried. The request-shape bug is fixed by
+-# omitting tool_choice (see ``_build_responses_payload``); any remaining HTTP
+-# error must surface verbatim so it stays diagnosable. See issues #19505,
+-# #49008 and #31335.
+-
+-_MAX_ERROR_BODY_CHARS = 500
+-
+-
+-def _summarize_error_body(body: str) -> str:
+-    """Return a bounded, information-preserving summary of an error body.
+-
+-    Prefers the parsed ``error.message`` field, because a blind head-truncation
+-    of the raw body can cut the actual message off entirely — Codex error
+-    payloads sometimes carry hundreds of bytes of leading metadata, so
+-    ``body[:500]`` yielded a wall of padding and no diagnosis. Falls back to a
+-    truncated raw body for non-JSON responses.
+-    """
+-    text = body or ""
+-    try:
+-        payload = json.loads(text)
+-        error = payload.get("error") if isinstance(payload, dict) else None
+-        message = error.get("message") if isinstance(error, dict) else None
+-        if isinstance(message, str) and message.strip():
+-            return message.strip()[:_MAX_ERROR_BODY_CHARS]
+-    except (TypeError, ValueError):
+-        pass
+-    return text[:_MAX_ERROR_BODY_CHARS]
+-
+-
+-
+-# ---------------------------------------------------------------------------
+-# Model catalog — mirrors the ``openai`` plugin so the picker UX is identical.
+-# ---------------------------------------------------------------------------
+-
+-API_MODEL = "gpt-image-2"
+-
+-_MODELS: Dict[str, Dict[str, Any]] = {
+-    "gpt-image-2-low": {
+-        "display": "GPT Image 2 (Low)",
+-        "speed": "~15s",
+-        "strengths": "Fast iteration, lowest cost",
+-        "quality": "low",
+-    },
+-    "gpt-image-2-medium": {
+-        "display": "GPT Image 2 (Medium)",
+-        "speed": "~40s",
+-        "strengths": "Balanced — default",
+-        "quality": "medium",
+-    },
+-    "gpt-image-2-high": {
+-        "display": "GPT Image 2 (High)",
+-        "speed": "~2min",
+-        "strengths": "Highest fidelity, strongest prompt adherence",
+-        "quality": "high",
+-    },
+-}
+-
+-DEFAULT_MODEL = "gpt-image-2-medium"
+-
+-_SIZES = {
+-    "landscape": "1536x1024",
+-    "square": "1024x1024",
+-    "portrait": "1024x1536",
+-}
+-
+-# Codex Responses surface used for the request. The chat model itself is only
+-# the host that calls the ``image_generation`` tool; the actual image work is
+-# done by ``API_MODEL``.
+-_CODEX_CHAT_MODEL = "gpt-5.5"
+-_CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
+-_CODEX_INSTRUCTIONS = (
+-    "You are an assistant that must fulfill image generation and image editing "
+-    "requests by using the image_generation tool when provided."
+-)
+-
+-_MAX_REFERENCE_IMAGES = 16
+-_MAX_INPUT_IMAGE_BYTES = 25 * 1024 * 1024
+-# gpt-image-2's Responses ``input_image`` accepts raster formats only. The
+-# shared magic-byte sniffer also recognizes SVG/TIFF/ICO, which the API
+-# rejects server-side — gate to this allowlist so unsupported inputs fail
+-# locally with a clear error instead of an opaque HTTP 400.
+-_ACCEPTED_INPUT_MIME = frozenset(
+-    {"image/png", "image/jpeg", "image/gif", "image/webp"}
+-)
+-
+-
+-# ---------------------------------------------------------------------------
+-# Config + auth helpers
+-# ---------------------------------------------------------------------------
+-
+-
+-def _load_image_gen_config() -> Dict[str, Any]:
+-    """Read ``image_gen`` from config.yaml (returns {} on any failure)."""
+-    try:
+-        from hermes_cli.config import load_config
+-
+-        cfg = load_config()
+-        section = cfg.get("image_gen") if isinstance(cfg, dict) else None
+-        return section if isinstance(section, dict) else {}
+-    except Exception as exc:
+-        logger.debug("Could not load image_gen config: %s", exc)
+-        return {}
+-
+-
+-def _resolve_model() -> Tuple[str, Dict[str, Any]]:
+-    """Decide which tier to use and return ``(model_id, meta)``."""
+-    import os
+-
+-    env_override = os.environ.get("OPENAI_IMAGE_MODEL")
+-    if env_override and env_override in _MODELS:
+-        return env_override, _MODELS[env_override]
+-
+-    cfg = _load_image_gen_config()
+-    sub = cfg.get("openai-codex") if isinstance(cfg.get("openai-codex"), dict) else {}
+-    candidate: Optional[str] = None
+-    if isinstance(sub, dict):
+-        value = sub.get("model")
+-        if isinstance(value, str) and value in _MODELS:
+-            candidate = value
+-    if candidate is None:
+-        top = cfg.get("model")
+-        if isinstance(top, str) and top in _MODELS:
+-            candidate = top
+-
+-    if candidate is not None:
+-        return candidate, _MODELS[candidate]
+-
+-    return DEFAULT_MODEL, _MODELS[DEFAULT_MODEL]
+-
+-
+-def _read_codex_access_token() -> Optional[str]:
+-    """Return a usable Codex OAuth token, or None.
+-
+-    Delegates to the canonical reader in ``agent.auxiliary_client`` so token
+-    expiry, credential pool selection, and JWT decoding stay in one place.
+-    """
+-    try:
+-        from agent.auxiliary_client import _read_codex_access_token as _reader
+-
+-        token = _reader()
+-        if isinstance(token, str) and token.strip():
+-            return token.strip()
+-        return None
+-    except Exception as exc:
+-        logger.debug("Could not resolve Codex access token: %s", exc)
+-        return None
+-
+-
+-def _sniff_image_mime(raw: bytes) -> Optional[str]:
+-    """Return a safe raster image MIME from magic bytes (not filename labels).
+-
+-    Delegates magic-byte detection to the shared sniffer in
+-    ``agent.image_routing`` (single source of truth), then gates the result
+-    to :data:`_ACCEPTED_INPUT_MIME` — the raster formats gpt-image-2's
+-    ``input_image`` actually accepts. SVG/TIFF/ICO (which the shared sniffer
+-    also recognizes) are rejected here so they fail locally with a clear
+-    error instead of an opaque server-side HTTP 400.
+-    """
+-    from agent.image_routing import _sniff_mime_from_bytes
+-
+-    mime = _sniff_mime_from_bytes(raw)
+-    if mime in _ACCEPTED_INPUT_MIME:
+-        return mime
+-    return None
+-
+-
+-def _data_url_to_input_image_url(value: str) -> str:
+-    """Validate and canonicalize a data:image URL for Responses input_image."""
+-    if "," not in value:
+-        raise ValueError("Image data URL is missing a comma separator")
+-    header, data = value.split(",", 1)
+-    header_lc = header.lower()
+-    if not header_lc.startswith("data:image/") or ";base64" not in header_lc:
+-        raise ValueError("Only base64 data:image URLs are supported as Codex image inputs")
+-    raw = base64.b64decode(data, validate=True)
+-    if len(raw) > _MAX_INPUT_IMAGE_BYTES:
+-        raise ValueError("Image data URL exceeds 25MB cap")
+-    mime = _sniff_image_mime(raw)
+-    if mime is None:
+-        raise ValueError("Image data URL does not contain supported image bytes")
+-    encoded = base64.b64encode(raw).decode("ascii")
+-    return f"data:{mime};base64,{encoded}"
+-
+-
+-def _local_image_to_data_url(value: str) -> str:
+-    """Read a local image path and return a validated data:image URL."""
+-    try:
+-        from agent.file_safety import get_read_block_error
+-
+-        blocked = get_read_block_error(value)
+-        if blocked:
+-            raise ValueError(blocked)
+-    except ValueError:
+-        raise
+-    except Exception as exc:
+-        logger.debug("Codex image input read guard unavailable: %s", exc)
+-
+-    path = Path(os.path.expanduser(value)).resolve()
+-    if not path.is_file():
+-        raise ValueError(f"Image input path does not exist or is not a file: {value}")
+-    size = path.stat().st_size
+-    if size <= 0:
+-        raise ValueError(f"Image input path is empty: {value}")
+-    if size > _MAX_INPUT_IMAGE_BYTES:
+-        raise ValueError(f"Image input path exceeds 25MB cap: {value}")
+-    raw = path.read_bytes()
+-    mime = _sniff_image_mime(raw)
+-    if mime is None:
+-        raise ValueError(f"Image input path is not a supported image: {value}")
+-    encoded = base64.b64encode(raw).decode("ascii")
+-    return f"data:{mime};base64,{encoded}"
+-
+-
+-def _to_input_image_part(value: str) -> Dict[str, str]:
+-    """Convert a URL/data URL/local path into a Responses input_image part."""
+-    candidate = (value or "").strip()
+-    if not candidate:
+-        raise ValueError("Blank image input")
+-    lowered = candidate.lower()
+-    if lowered.startswith("http://") or lowered.startswith("https://"):
+-        image_url = candidate
+-    elif lowered.startswith("data:"):
+-        image_url = _data_url_to_input_image_url(candidate)
+-    else:
+-        image_url = _local_image_to_data_url(candidate)
+-    return {"type": "input_image", "image_url": image_url}
+-
+-
+-def _normalize_input_images(
+-    image_url: Optional[str],
+-    reference_image_urls: Optional[List[str]],
+-) -> List[Dict[str, str]]:
+-    """Collect primary + reference images as ordered Responses content parts."""
+-    values: List[str] = []
+-    if isinstance(image_url, str) and image_url.strip():
+-        values.append(image_url.strip())
+-    for ref in (normalize_reference_images(reference_image_urls) or []):
+-        values.append(ref)
+-    values = values[:_MAX_REFERENCE_IMAGES]
+-    return [_to_input_image_part(value) for value in values]
+-
+-
+-# Progressive preview frames (partial_image_b64) are intermediate renders.
+-# Saving them as finals produced the long-running "smear" failure mode on the
+-# Codex Responses path. Defense in depth:
+-#   1) request layer prefers no progressive frames when the backend honors it
+-#   2) extractor never lets a partial overwrite a final result
+-#   3) generate() only delivers source=final; partial-only / empty are not success
+-# Live streams sometimes still emit a partial event even with 0; that is fine as
+-# long as only a final ``result`` can be saved.
+-_PARTIAL_IMAGES_REQUESTED = 0
+-# Content-agnostic retries when the stream does not yield a final result
+-# (empty stream or progressive-only). No prompt-class branching.
+-_NONFINAL_RETRIES = 1
+-
+-
+-def _build_responses_payload(
+-    *,
+-    prompt: str,
+-    size: str,
+-    quality: str,
+-    input_images: Optional[List[Dict[str, str]]] = None,
+-) -> Dict[str, Any]:
+-    """Build the Codex Responses request body for an image_generation call."""
+-    content: List[Dict[str, Any]] = [{"type": "input_text", "text": prompt}]
+-    if input_images:
+-        content.extend(input_images)
+-    return {
+-        "model": _CODEX_CHAT_MODEL,
+-        "store": False,
+-        "instructions": _CODEX_INSTRUCTIONS,
+-        "input": [{
+-            "type": "message",
+-            "role": "user",
+-            "content": content,
+-        }],
+-        "tools": [{
+-            "type": "image_generation",
+-            "model": API_MODEL,
+-            "size": size,
+-            "quality": quality,
+-            "output_format": "png",
+-            "background": "opaque",
+-            # Prefer 0 progressive preview frames. Preview frames can arrive
+-            # without a later final ``result`` and look like smeared /
+-            # unfinished images if saved as the deliverable. Even when the
+-            # backend still emits a partial event, generate() refuses to
+-            # deliver anything except source=final.
+-            "partial_images": _PARTIAL_IMAGES_REQUESTED,
+-        }],
+-        # No ``tool_choice`` is sent: the chatgpt.com/backend-api/codex backend
+-        # rejects every shape we have for forcing the hosted ``image_generation``
+-        # tool. ``{"type": "allowed_tools", "mode": "required", "tools": [{"type":
+-        # "image_generation"}]}`` (and the simpler ``{"type": "image_generation"}``
+-        # form) both 400 with ``Tool choice 'image_generation' not found in 'tools'
+-        # parameter`` — the backend looks up tool_choice as a *function* name and
+-        # never recognizes hosted-tool entries. Letting the host model decide is
+-        # the only shape Codex currently accepts; the ``instructions`` above are
+-        # what nudge it toward the tool. See issue #19505.
+-        "stream": True,
+-    }
+-
+-
+-def _extract_image_candidates(value: Any) -> Tuple[Optional[str], Optional[str]]:
+-    """Return ``(final_result_b64, latest_partial_b64)`` from a payload tree.
+-
+-    Final ``image_generation_call.result`` and progressive ``partial_image_b64``
+-    are tracked separately so a partial can never overwrite a genuine final,
+-    including when both coexist in the same event payload.
+-    """
+-    result_b64: Optional[str] = None
+-    partial_b64: Optional[str] = None
+-
+-    def walk(node: Any) -> None:
+-        nonlocal result_b64, partial_b64
+-        if isinstance(node, dict):
+-            if node.get("type") == "image_generation_call":
+-                result = node.get("result")
+-                if isinstance(result, str) and result:
+-                    result_b64 = result
+-            partial = node.get("partial_image_b64")
+-            if isinstance(partial, str) and partial:
+-                partial_b64 = partial
+-            for child in node.values():
+-                walk(child)
+-        elif isinstance(node, list):
+-            for child in node:
+-                walk(child)
+-
+-    walk(value)
+-    return result_b64, partial_b64
+-
+-
+-def _extract_image_b64(value: Any) -> Optional[str]:
+-    """Return image b64 from a payload, preferring final result over partial.
+-
+-    Progressive ``partial_image_b64`` is only used when no final
+-    ``image_generation_call.result`` is present in the same payload tree.
+-    """
+-    result_b64, partial_b64 = _extract_image_candidates(value)
+-    return result_b64 or partial_b64
+-
+-
+-def _png_pixel_size(raw: bytes) -> Optional[str]:
+-    """Return ``\"{w}x{h}\"`` for a PNG payload, or None if not a PNG IHDR."""
+-    import struct
+-
+-    if len(raw) < 24 or raw[:8] != b"\x89PNG\r\n\x1a\n":
+-        return None
+-    # IHDR: length(4) + type(4) + width(4) + height(4)
+-    if raw[12:16] != b"IHDR":
+-        return None
+-    width, height = struct.unpack(">II", raw[16:24])
+-    return f"{width}x{height}"
+-
+-
+-def _iter_sse_json(response: Any):
+-    """Yield JSON payloads from an SSE response without OpenAI SDK parsing.
+-
+-    The ChatGPT/Codex backend can emit image-generation events newer than the
+-    pinned Python SDK understands. Parsing raw SSE keeps this provider tolerant
+-    of those event-shape changes.
+-    """
+-    event_name: Optional[str] = None
+-    data_lines: List[str] = []
+-
+-    def flush():
+-        nonlocal event_name, data_lines
+-        if not data_lines:
+-            event_name = None
+-            return None
+-        raw = "\n".join(data_lines).strip()
+-        event = event_name
+-        event_name = None
+-        data_lines = []
+-        if not raw or raw == "[DONE]":
+-            return None
+-        payload = json.loads(raw)
+-        if isinstance(payload, dict) and event and "type" not in payload:
+-            payload["type"] = event
+-        return payload
+-
+-    for line in response.iter_lines():
+-        if isinstance(line, bytes):
+-            line = line.decode("utf-8", errors="replace")
+-        line = str(line)
+-        if line == "":
+-            payload = flush()
+-            if payload is not None:
+-                yield payload
+-            continue
+-        if line.startswith(":"):
+-            continue
+-        if line.startswith("event:"):
+-            event_name = line[len("event:"):].strip()
+-        elif line.startswith("data:"):
+-            data_lines.append(line[len("data:"):].lstrip())
+-
+-    payload = flush()
+-    if payload is not None:
+-        yield payload
+-
+-
+-def _collect_image_b64(
+-    token: str,
+-    *,
+-    prompt: str,
+-    size: str,
+-    quality: str,
+-    input_images: Optional[List[Dict[str, str]]] = None,
+-) -> Optional[Dict[str, str]]:
+-    """Stream a Codex Responses image_generation call.
+-
+-    Returns ``{\"b64\": ..., \"source\": \"final\"|\"partial\"}`` or ``None``.
+-
+-    Final ``result`` frames are preferred across the whole stream. A progressive
+-    ``partial_image_b64`` is retained only when no final result ever arrives;
+-    callers must not treat partial-only as an unconditional success.
+-    """
+-    import httpx
+-    from agent.codex_headers import codex_cloudflare_headers
+-
+-    headers = codex_cloudflare_headers(token)
+-    headers.update({
+-        "Accept": "text/event-stream",
+-        "Authorization": f"Bearer {token}",
+-        "Content-Type": "application/json",
+-    })
+-    payload = _build_responses_payload(
+-        prompt=prompt,
+-        size=size,
+-        quality=quality,
+-        input_images=input_images,
+-    )
+-    timeout = httpx.Timeout(300.0, connect=30.0, read=300.0, write=30.0, pool=30.0)
+-
+-    final_b64: Optional[str] = None
+-    partial_b64: Optional[str] = None
+-    with httpx.Client(timeout=timeout, headers=headers) as http:
+-        with http.stream("POST", f"{_CODEX_BASE_URL}/responses", json=payload) as response:
+-            try:
+-                response.raise_for_status()
+-            except httpx.HTTPStatusError as exc:
+-                exc.response.read()
+-                raise RuntimeError(
+-                    f"Codex Responses API returned HTTP {exc.response.status_code}: "
+-                    f"{_summarize_error_body(exc.response.text)}"
+-                ) from exc
+-            for event in _iter_sse_json(response):
+-                result_b64, event_partial = _extract_image_candidates(event)
+-                if result_b64:
+-                    final_b64 = result_b64
+-                if event_partial:
+-                    partial_b64 = event_partial
+-
+-    if final_b64:
+-        return {"b64": final_b64, "source": "final"}
+-    if partial_b64:
+-        return {"b64": partial_b64, "source": "partial"}
+-    return None
+-
+-
+-# ---------------------------------------------------------------------------
+-# Provider
+-# ---------------------------------------------------------------------------
+-
+-
+-class OpenAICodexImageGenProvider(ImageGenProvider):
+-    """gpt-image-2 routed through ChatGPT/Codex OAuth instead of an API key."""
+-
+-    @property
+-    def name(self) -> str:
+-        return "openai-codex"
+-
+-    @property
+-    def display_name(self) -> str:
+-        return "OpenAI (Codex auth)"
+-
+-    def is_available(self) -> bool:
+-        if not _read_codex_access_token():
+-            return False
+-        try:
+-            import httpx  # noqa: F401
+-        except ImportError:
+-            return False
+-        return True
+-
+-    def list_models(self) -> List[Dict[str, Any]]:
+-        return [
+-            {
+-                "id": model_id,
+-                "display": meta["display"],
+-                "speed": meta["speed"],
+-                "strengths": meta["strengths"],
+-                "price": "varies",
+-            }
+-            for model_id, meta in _MODELS.items()
+-        ]
+-
+-    def default_model(self) -> Optional[str]:
+-        return DEFAULT_MODEL
+-
+-    def get_setup_schema(self) -> Dict[str, Any]:
+-        return {
+-            "name": "OpenAI (Codex auth)",
+-            "badge": "free",
+-            "tag": "gpt-image-2 via ChatGPT/Codex OAuth — no API key required; supports text and image inputs",
+-            "env_vars": [],
+-            "post_setup_hint": (
+-                "Sign in with `hermes auth codex` (or `hermes setup` → Codex) "
+-                "if you haven't already. No API key needed."
+-            ),
+-        }
+-
+-    def capabilities(self) -> Dict[str, Any]:
+-        # The Codex Responses image_generation tool accepts source/reference
+-        # images as `input_image` message content parts. Keep this capability
+-        # honest so the dynamic `image_generate` schema encourages identity-
+-        # preserving edits instead of unrelated text-to-image redraws.
+-        return {"modalities": ["text", "image"], "max_reference_images": _MAX_REFERENCE_IMAGES}
+-
+-    def generate(
+-        self,
+-        prompt: str,
+-        aspect_ratio: str = DEFAULT_ASPECT_RATIO,
+-        *,
+-        image_url: Optional[str] = None,
+-        reference_image_urls: Optional[List[str]] = None,
+-        **kwargs: Any,
+-    ) -> Dict[str, Any]:
+-        prompt = (prompt or "").strip()
+-        aspect = resolve_aspect_ratio(aspect_ratio)
+-
+-        if not prompt:
+-            return error_response(
+-                error="Prompt is required and must be a non-empty string",
+-                error_type="invalid_argument",
+-                provider="openai-codex",
+-                aspect_ratio=aspect,
+-            )
+-
+-        if not _read_codex_access_token():
+-            return error_response(
+-                error=(
+-                    "No Codex/ChatGPT OAuth credentials available. Run "
+-                    "`hermes auth codex` (or `hermes setup` → Codex) to sign in."
+-                ),
+-                error_type="auth_required",
+-                provider="openai-codex",
+-                aspect_ratio=aspect,
+-            )
+-
+-        try:
+-            import httpx  # noqa: F401
+-        except ImportError:
+-            return error_response(
+-                error="httpx Python package not installed (pip install httpx)",
+-                error_type="missing_dependency",
+-                provider="openai-codex",
+-                aspect_ratio=aspect,
+-            )
+-
+-        tier_id, meta = _resolve_model()
+-        size = _SIZES.get(aspect, _SIZES["square"])
+-
+-        token = _read_codex_access_token()
+-        if not token:
+-            return error_response(
+-                error=(
+-                    "No Codex/ChatGPT OAuth credentials available. Run "
+-                    "`hermes auth codex` (or `hermes setup` → Codex) to sign in."
+-                ),
+-                error_type="auth_required",
+-                provider="openai-codex",
+-                model=tier_id,
+-                prompt=prompt,
+-                aspect_ratio=aspect,
+-            )
+-
+-        try:
+-            input_images = _normalize_input_images(image_url, reference_image_urls)
+-        except Exception as exc:
+-            return error_response(
+-                error=f"Invalid image input for Codex image editing: {exc}",
+-                error_type="invalid_image_input",
+-                provider="openai-codex",
+-                model=tier_id,
+-                prompt=prompt,
+-                aspect_ratio=aspect,
+-            )
+-
+-        try:
+-            collected: Optional[Dict[str, str]] = None
+-            for attempt in range(_NONFINAL_RETRIES + 1):
+-                collected = _collect_image_b64(
+-                    token,
+-                    prompt=prompt,
+-                    size=size,
+-                    quality=meta["quality"],
+-                    input_images=input_images or None,
+-                )
+-                if collected and collected.get("source") == "final" and collected.get("b64"):
+-                    break
+-                if attempt < _NONFINAL_RETRIES:
+-                    kind = (
+-                        "progressive-only partial frame"
+-                        if collected and collected.get("source") == "partial"
+-                        else "no image_generation_call result"
+-                    )
+-                    logger.warning(
+-                        "Codex image stream ended with %s (attempt %s/%s); "
+-                        "retrying once before failing closed.",
+-                        kind,
+-                        attempt + 1,
+-                        _NONFINAL_RETRIES + 1,
+-                    )
+-                    continue
+-                break
+-        except Exception as exc:
+-            logger.debug("Codex image generation failed", exc_info=True)
+-            return error_response(
+-                error=f"OpenAI image generation via Codex auth failed: {exc}",
+-                error_type="api_error",
+-                provider="openai-codex",
+-                model=tier_id,
+-                prompt=prompt,
+-                aspect_ratio=aspect,
+-            )
+-
+-        if not collected or not collected.get("b64"):
+-            return error_response(
+-                error=(
+-                    "Codex response contained no image_generation_call result "
+-                    f"after {_NONFINAL_RETRIES + 1} attempt(s)"
+-                ),
+-                error_type="empty_response",
+-                provider="openai-codex",
+-                model=tier_id,
+-                prompt=prompt,
+-                aspect_ratio=aspect,
+-            )
+-
+-        image_source = collected.get("source") or "unknown"
+-        b64 = collected["b64"]
+-
+-        # Defense in depth: never deliver a progressive-only frame as success.
+-        # Partials are intermediate previews and have presented as smeared /
+-        # unfinished images when saved as finals.
+-        if image_source != "final":
+-            pixel_hint = None
+-            try:
+-                import base64 as _b64mod
+-
+-                pixel_hint = _png_pixel_size(_b64mod.b64decode(b64, validate=False))
+-            except Exception:
+-                pixel_hint = None
+-            detail = (
+-                "Codex returned only a progressive partial image frame after "
+-                f"{_NONFINAL_RETRIES + 1} attempt(s); refusing to save it "
+-                "as a final deliverable."
+-            )
+-            if pixel_hint:
+-                detail = f"{detail} partial_pixel_size={pixel_hint}."
+-            err = error_response(
+-                error=detail,
+-                error_type="incomplete_image",
+-                provider="openai-codex",
+-                model=tier_id,
+-                prompt=prompt,
+-                aspect_ratio=aspect,
+-            )
+-            err["image_source"] = image_source
+-            err["requested_size"] = size
+-            err["partial_pixel_size"] = pixel_hint
+-            err["nonfinal_retries"] = _NONFINAL_RETRIES
+-            return err
+-
+-        try:
+-            import base64 as _b64mod
+-
+-            raw_bytes = _b64mod.b64decode(b64)
+-            pixel_size = _png_pixel_size(raw_bytes)
+-            saved_path = save_b64_image(b64, prefix=f"openai_codex_{tier_id}")
+-        except Exception as exc:
+-            return error_response(
+-                error=f"Could not save image to cache: {exc}",
+-                error_type="io_error",
+-                provider="openai-codex",
+-                model=tier_id,
+-                prompt=prompt,
+-                aspect_ratio=aspect,
+-            )
+-
+-        return success_response(
+-            image=str(saved_path),
+-            model=tier_id,
+-            prompt=prompt,
+-            aspect_ratio=aspect,
+-            provider="openai-codex",
+-            modality="image" if input_images else "text",
+-            extra={
+-                "size": size,
+-                "quality": meta["quality"],
+-                "input_image_count": len(input_images),
+-                "image_source": image_source,
+-                "requested_size": size,
+-                "pixel_size": pixel_size,
+-            },
+-        )
+-
+-
+-# ---------------------------------------------------------------------------
+-# Plugin entry point
+-# ---------------------------------------------------------------------------
+-
+-
+-def register(ctx) -> None:
+-    """Plugin entry point — register the Codex-backed image-gen provider."""
+-    ctx.register_image_gen_provider(OpenAICodexImageGenProvider())
+diff --git a/plugins/image_gen/openai-codex/plugin.yaml b/plugins/image_gen/openai-codex/plugin.yaml
+deleted file mode 100644
+index 6175777..0000000
+--- a/plugins/image_gen/openai-codex/plugin.yaml
++++ /dev/null
+@@ -1,5 +0,0 @@
+-name: openai-codex
+-version: 1.0.0
+-description: "OpenAI image generation backed by ChatGPT/Codex OAuth (gpt-image-2 via the Responses image_generation tool). Saves generated images to $HERMES_HOME/cache/images/."
+-author: NousResearch
+-kind: backend
+diff --git a/plugins/model-providers/anthropic/__init__.py b/plugins/model-providers/anthropic/__init__.py
+deleted file mode 100644
+index 2773476..0000000
+--- a/plugins/model-providers/anthropic/__init__.py
++++ /dev/null
+@@ -1,54 +0,0 @@
+-"""Native Anthropic provider profile."""
+-
+-import json
+-import logging
+-import urllib.request
+-
+-from hermes_cli.urllib_security import open_credentialed_url
+-from providers import register_provider
+-from providers.base import ProviderProfile
+-
+-logger = logging.getLogger(__name__)
+-
+-
+-class AnthropicProfile(ProviderProfile):
+-    """Native Anthropic — uses x-api-key header, not Bearer."""
+-
+-    def fetch_models(
+-        self,
+-        *,
+-        api_key: str | None = None,
+-        base_url: str | None = None,
+-        timeout: float = 8.0,
+-    ) -> list[str] | None:
+-        """Anthropic uses x-api-key header and anthropic-version."""
+-        if not api_key:
+-            return None
+-        try:
+-            req = urllib.request.Request("https://api.anthropic.com/v1/models")
+-            req.add_header("x-api-key", api_key)
+-            req.add_header("anthropic-version", "2023-06-01")
+-            req.add_header("Accept", "application/json")
+-            with open_credentialed_url(req, timeout=timeout) as resp:
+-                data = json.loads(resp.read().decode())
+-            return [
+-                m["id"]
+-                for m in data.get("data", [])
+-                if isinstance(m, dict) and "id" in m
+-            ]
+-        except Exception as exc:
+-            logger.debug("fetch_models(anthropic): %s", exc)
+-            return None
+-
+-
+-anthropic = AnthropicProfile(
+-    name="anthropic",
+-    aliases=("claude", "claude-oauth", "claude-code"),
+-    api_mode="anthropic_messages",
+-    env_vars=("ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"),
+-    base_url="https://api.anthropic.com",
+-    auth_type="api_key",
+-    default_aux_model="claude-haiku-4-5-20251001",
+-)
+-
+-register_provider(anthropic)
+diff --git a/plugins/model-providers/anthropic/plugin.yaml b/plugins/model-providers/anthropic/plugin.yaml
+deleted file mode 100644
+index 7770a5c..0000000
+--- a/plugins/model-providers/anthropic/plugin.yaml
++++ /dev/null
+@@ -1,5 +0,0 @@
+-name: anthropic-provider
+-kind: model-provider
+-version: 1.0.0
+-description: Anthropic (Claude)
+-author: Nous Research
+diff --git a/plugins/model-providers/copilot-acp/__init__.py b/plugins/model-providers/copilot-acp/__init__.py
+deleted file mode 100644
+index 6e45270..0000000
+--- a/plugins/model-providers/copilot-acp/__init__.py
++++ /dev/null
+@@ -1,35 +0,0 @@
+-"""GitHub Copilot ACP provider profile.
+-
+-copilot-acp uses an external ACP subprocess — NOT the standard
+-transport. api_mode="copilot_acp" is handled separately in run_agent.py.
+-The profile captures auth + endpoint metadata for registry migration.
+-"""
+-
+-from providers import register_provider
+-from providers.base import ProviderProfile
+-
+-
+-class CopilotACPProfile(ProviderProfile):
+-    """GitHub Copilot ACP — external process, no REST models endpoint."""
+-
+-    def fetch_models(
+-        self,
+-        *,
+-        api_key: str | None = None,
+-        base_url: str | None = None,
+-        timeout: float = 8.0,
+-    ) -> list[str] | None:
+-        """Model listing is handled by the ACP subprocess."""
+-        return None
+-
+-
+-copilot_acp = CopilotACPProfile(
+-    name="copilot-acp",
+-    aliases=("github-copilot-acp", "copilot-acp-agent"),
+-    api_mode="chat_completions",  # ACP subprocess uses chat_completions routing
+-    env_vars=(),  # Managed by ACP subprocess
+-    base_url="acp://copilot",  # ACP internal scheme
+-    auth_type="external_process",
+-)
+-
+-register_provider(copilot_acp)
+diff --git a/plugins/model-providers/copilot-acp/plugin.yaml b/plugins/model-providers/copilot-acp/plugin.yaml
+deleted file mode 100644
+index bb3d7ac..0000000
+--- a/plugins/model-providers/copilot-acp/plugin.yaml
++++ /dev/null
+@@ -1,5 +0,0 @@
+-name: copilot-acp-provider
+-kind: model-provider
+-version: 1.0.0
+-description: GitHub Copilot via ACP subprocess
+-author: Nous Research
+diff --git a/plugins/model-providers/copilot/__init__.py b/plugins/model-providers/copilot/__init__.py
+deleted file mode 100644
+index f8b5912..0000000
+--- a/plugins/model-providers/copilot/__init__.py
++++ /dev/null
+@@ -1,80 +0,0 @@
+-"""Copilot / GitHub Models provider profile.
+-
+-Copilot uses per-model api_mode routing:
+-  - GPT-5+ / Codex models → codex_responses
+-  - Claude models → anthropic_messages
+-  - Everything else → chat_completions (this profile covers that subset)
+-
+-Key quirks for the chat_completions subset:
+-  - Editor attribution headers (via copilot_default_headers())
+-  - GitHub Models reasoning extra_body (model-catalog gated)
+-"""
+-
+-from typing import Any
+-
+-from providers import register_provider
+-from providers.base import ProviderProfile
+-
+-
+-class CopilotProfile(ProviderProfile):
+-    """GitHub Copilot / GitHub Models — editor headers + reasoning."""
+-
+-    def build_api_kwargs_extras(
+-        self,
+-        *,
+-        model: str | None = None,
+-        reasoning_config: dict | None = None,
+-        supports_reasoning: bool = False,
+-        **ctx,
+-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+-        extra_body: dict[str, Any] = {}
+-        if supports_reasoning and model:
+-            try:
+-                from hermes_cli.models import github_model_reasoning_efforts
+-
+-                supported_efforts = github_model_reasoning_efforts(model)
+-                if supported_efforts and reasoning_config:
+-                    effort = reasoning_config.get("effort", "medium")
+-                    # Honor the requested level when the live Copilot catalog
+-                    # lists it as supported: gpt-5.5/gpt-5.4 DO support
+-                    # ``xhigh``. Otherwise clamp to the nearest WEAKER
+-                    # supported level via the shared ladder helper — the old
+-                    # ad-hoc rules dropped everything unrecognized to
+-                    # ``medium``, which inverted the ladder: ``ultra`` (the
+-                    # strongest ask) resolved weaker than an explicit
+-                    # ``high`` (#74295).
+-                    if effort not in supported_efforts:
+-                        from hermes_cli.models import (
+-                            clamp_reasoning_effort_to_supported,
+-                        )
+-
+-                        effort = clamp_reasoning_effort_to_supported(
+-                            effort, list(supported_efforts)
+-                        )
+-                        if effort not in supported_efforts:
+-                            # Unrecognized/bespoke level the ladder can't
+-                            # place — fall back to medium, then to the
+-                            # catalog's first entry.
+-                            effort = (
+-                                "medium"
+-                                if "medium" in supported_efforts
+-                                else supported_efforts[0]
+-                            )
+-                    if effort in supported_efforts:
+-                        extra_body["reasoning"] = {"effort": effort}
+-                elif supported_efforts:
+-                    extra_body["reasoning"] = {"effort": "medium"}
+-            except Exception:
+-                pass
+-        return extra_body, {}
+-
+-
+-copilot = CopilotProfile(
+-    name="copilot",
+-    aliases=("github-copilot", "github-models", "github-model", "github"),
+-    env_vars=("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"),
+-    base_url="https://api.githubcopilot.com",
+-    auth_type="copilot",
+-)
+-
+-register_provider(copilot)
+diff --git a/plugins/model-providers/copilot/plugin.yaml b/plugins/model-providers/copilot/plugin.yaml
+deleted file mode 100644
+index cdaa8f5..0000000
+--- a/plugins/model-providers/copilot/plugin.yaml
++++ /dev/null
+@@ -1,5 +0,0 @@
+-name: copilot-provider
+-kind: model-provider
+-version: 1.0.0
+-description: GitHub Copilot
+-author: Nous Research
+diff --git a/plugins/model-providers/openai-codex/__init__.py b/plugins/model-providers/openai-codex/__init__.py
+deleted file mode 100644
+index 8124b9e..0000000
+--- a/plugins/model-providers/openai-codex/__init__.py
++++ /dev/null
+@@ -1,15 +0,0 @@
+-"""OpenAI Codex (Responses API) provider profile."""
+-
+-from providers import register_provider
+-from providers.base import ProviderProfile
+-
+-openai_codex = ProviderProfile(
+-    name="openai-codex",
+-    aliases=("codex", "openai_codex"),
+-    api_mode="codex_responses",
+-    env_vars=(),  # OAuth external — no API key
+-    base_url="https://chatgpt.com/backend-api/codex",
+-    auth_type="oauth_external",
+-)
+-
+-register_provider(openai_codex)
+diff --git a/plugins/model-providers/openai-codex/plugin.yaml b/plugins/model-providers/openai-codex/plugin.yaml
+deleted file mode 100644
+index f397cd4..0000000
+--- a/plugins/model-providers/openai-codex/plugin.yaml
++++ /dev/null
+@@ -1,5 +0,0 @@
+-name: openai-codex-provider
+-kind: model-provider
+-version: 1.0.0
+-description: OpenAI Codex (Responses API)
+-author: Nous Research
+diff --git a/tests/hq_pilot/__init__.py b/tests/hq_pilot/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/hq_pilot/test_fence.py b/tests/hq_pilot/test_fence.py
+new file mode 100644
+index 0000000..b62f0df
+--- /dev/null
++++ b/tests/hq_pilot/test_fence.py
+@@ -0,0 +1,288 @@
++"""Regression tests for the HQ pilot Anthropic/Claude-Code credential fence.
++
++Written against skills/hq-hermes/reviews/proof-check-2026-09-03.md (Wave 3,
++ticket T3e) so a future change cannot silently reopen H1/H2/H4/M7 without a
++test going red. Widened in T3f (proof-check-rerun-2026-09-03.md) to cover
++NEW-1/NEW-2 and the H3 import-fallback path. stdlib ``unittest`` only -- no
++pytest, no network, no real credentials. Run with::
++
++    cd "$CO" && ./.venv/bin/python -m unittest tests.hq_pilot.test_fence -v
++"""
++
++import collections
++import os
++import re
++import sys
++import types
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++REPO_ROOT = Path(__file__).resolve().parents[2]
++
++
++class TestCredentialSourcesReturnNone(unittest.TestCase):
++    """resolve_anthropic_token() / read_claude_code_credentials(): every
++    Anthropic credential source stays neutralised while the pilot guard is
++    on (T3b baseline; re-asserted here as a regression floor)."""
++
++    def test_resolve_anthropic_token_is_none(self):
++        from agent.anthropic_credentials import resolve_anthropic_token
++
++        self.assertIsNone(resolve_anthropic_token())
++
++    def test_read_claude_code_credentials_is_none(self):
++        from agent.anthropic_credentials import read_claude_code_credentials
++
++        self.assertIsNone(read_claude_code_credentials())
++
++
++class TestBuildAnthropicClientRaises(unittest.TestCase):
++    """H1: the guard sits at the TOP of build_anthropic_client, before any
++    endpoint/kimi/bearer/third-party branching -- an OAuth-shaped token
++    routed through ANY branch (including a third-party base_url such as
++    *.claude.com) must never reach a live client."""
++
++    def test_build_anthropic_client_raises_runtimeerror(self):
++        from agent.anthropic_adapter import build_anthropic_client
++
++        with self.assertRaises(RuntimeError):
++            build_anthropic_client(api_key="cc-fake-oauth-x", base_url="https://x.claude.com")
++
++    def test_create_anthropic_message_raises_runtimeerror(self):
++        from agent.anthropic_adapter import create_anthropic_message
++
++        with self.assertRaises(RuntimeError):
++            create_anthropic_message(client=object(), api_kwargs={})
++
++
++class TestAlwaysStripKeys(unittest.TestCase):
++    """H2: ANTHROPIC_TOKEN / CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_API_KEY are
++    Tier-1 in tools/environments/local.py -- stripped unconditionally, even
++    on the inherit_credentials=True path that a model-driving `claude` /
++    `codex` / `copilot` child spawn uses."""
++
++    REQUIRED = {"ANTHROPIC_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"}
++
++    def test_always_strip_keys_superset(self):
++        from tools.environments.local import _ALWAYS_STRIP_KEYS
++
++        missing = self.REQUIRED - _ALWAYS_STRIP_KEYS
++        self.assertFalse(missing, f"missing from _ALWAYS_STRIP_KEYS: {missing}")
++
++    def test_hermes_subprocess_env_strips_even_when_inheriting(self):
++        from tools.environments.local import hermes_subprocess_env
++
++        fake_base_env = {
++            "PATH": "/usr/bin:/bin",
++            "HOME": "/home/user",
++            "USER": "testuser",
++            "ANTHROPIC_TOKEN": "cc-fake-oauth-token",
++            "CLAUDE_CODE_OAUTH_TOKEN": "cc-fake",
++            "ANTHROPIC_API_KEY": "fake-plain-api-key",
++        }
++        with patch.dict(os.environ, fake_base_env, clear=True):
++            result = hermes_subprocess_env(inherit_credentials=True)
++
++        for key in self.REQUIRED:
++            self.assertNotIn(
++                key, result,
++                f"{key} leaked into a child env with inherit_credentials=True",
++            )
++
++
++class TestProviderRegistryPruned(unittest.TestCase):
++    """H4: subscription-reuse providers are removed from PROVIDER_REGISTRY
++    while the pilot guard is on, so `hermes auth add openai-codex` / the
++    doctor auth-provider check / resolve_provider_client can't find them."""
++
++    def test_openai_codex_and_copilot_not_registered(self):
++        from hermes_cli.auth import PROVIDER_REGISTRY
++
++        self.assertNotIn("openai-codex", PROVIDER_REGISTRY)
++        self.assertNotIn("copilot", PROVIDER_REGISTRY)
++
++    def test_copilot_acp_not_registered(self):
++        # Same H4 fix, same registry pop -- covered rather than skipped
++        # since it costs nothing.
++        from hermes_cli.auth import PROVIDER_REGISTRY
++
++        self.assertNotIn("copilot-acp", PROVIDER_REGISTRY)
++
++
++class TestSingleGuardDefinition(unittest.TestCase):
++    """M7: exactly one ``HQ_PILOT_ANTHROPIC_DISABLED = `` assignment across
++    the whole guarded tree -- three independent copies used to exist
++    (anthropic_credentials, anthropic_adapter, credential_pool); a partial
++    flip of one produced a half-open fence with no error. Mirrors the
++    ticket's shell grep, done in Python so it runs inside the same test
++    process.
++
++    Widened past ``agent/`` alone (proof-check-rerun-2026-09-03.md, T3f):
++    this same ticket imports the guard into ``hermes_cli/`` (runtime_provider.py,
++    model_setup_flows.py, models.py, doctor.py) and ``tools/`` (environments/
++    local.py) too, so those trees need the same "exactly one" floor."""
++
++    SCAN_DIRNAMES = ("agent", "hermes_cli", "tools")
++
++    def test_exactly_one_guard_definition(self):
++        pattern = re.compile(r"^HQ_PILOT_ANTHROPIC_DISABLED = ")
++        scan_dirs = [REPO_ROOT / name for name in self.SCAN_DIRNAMES]
++        for d in scan_dirs:
++            self.assertTrue(d.is_dir(), f"expected {d} to exist")
++
++        matches = []
++        for base_dir in scan_dirs:
++            for path in base_dir.rglob("*.py"):
++                if ".venv" in path.parts or "tests" in path.parts:
++                    continue
++                try:
++                    text = path.read_text(encoding="utf-8", errors="replace")
++                except OSError:
++                    continue
++                for lineno, line in enumerate(text.splitlines(), start=1):
++                    if pattern.match(line):
++                        matches.append(f"{path}:{lineno}")
++
++        self.assertEqual(
++            len(matches), 1,
++            f"expected exactly one HQ_PILOT_ANTHROPIC_DISABLED definition "
++            f"under {[str(d) for d in scan_dirs]}, found {len(matches)}: {matches}",
++        )
++        self.assertIn("anthropic_credentials.py", matches[0])
++
++
++class TestGuardImportFallbackFailsClosed(unittest.TestCase):
++    """H3 fallback: when ``from agent.anthropic_credentials import
++    HQ_PILOT_ANTHROPIC_DISABLED`` itself raises ImportError, every fallback
++    site must resolve to disabled=True (fail closed), never disabled=False
++    (fail open). Simulates the unimportable guard module by placing ``None``
++    in ``sys.modules`` under its dotted name -- the standard trick for
++    forcing ``ImportError`` at an exact import statement, per Python import
++    system semantics (a ``None`` entry make the import machinery raise
++    immediately) -- then calls one real fallback site directly:
++    ``tools.environments.local._build_provider_env_blocklist()``, which
++    tests the H3 fallback that discards ``CLAUDE_CODE_OAUTH_TOKEN`` from the
++    blocklist only when the guard resolves to NOT disabled."""
++
++    def test_build_provider_env_blocklist_fails_closed_on_unimportable_guard(self):
++        from tools.environments.local import _build_provider_env_blocklist
++
++        with patch.dict(sys.modules, {"agent.anthropic_credentials": None}):
++            blocked = _build_provider_env_blocklist()
++
++        # Fail-closed means the discard never ran: the token stays blocked.
++        self.assertIn(
++            "CLAUDE_CODE_OAUTH_TOKEN", blocked,
++            "guard import failure did not fail closed -- "
++            "CLAUDE_CODE_OAUTH_TOKEN was discarded from the blocklist",
++        )
++
++
++class TestNewOneCopilotRuntimeRefusal(unittest.TestCase):
++    """NEW-1 (proof-check-rerun-2026-09-03.md): a hard
++    ``PROVIDER_REGISTRY["copilot"]`` subscript in
++    ``_resolve_runtime_from_pool_entry`` raised KeyError once the H4 fix
++    popped the registry entry while the pilot guard is on. Must be a clear
++    ``RuntimeError`` refusal instead -- calls the real runtime_provider
++    function with a minimal pool-entry config."""
++
++    def test_resolve_runtime_copilot_raises_runtimeerror_not_keyerror(self):
++        from agent.credential_pool import PooledCredential
++        from hermes_cli.auth import PROVIDER_REGISTRY
++        from hermes_cli.runtime_provider import _resolve_runtime_from_pool_entry
++
++        # This is the precondition NEW-1 depends on (H4's registry pop);
++        # assert it rather than assume it, so a change to H4 fails loudly
++        # here instead of this test silently proving nothing.
++        self.assertNotIn("copilot", PROVIDER_REGISTRY)
++
++        entry = PooledCredential(
++            provider="copilot",
++            id="test-copilot",
++            label="test",
++            auth_type="api_key",
++            priority=0,
++            source="test",
++            access_token="fake-token",
++        )
++        with self.assertRaises(RuntimeError) as ctx:
++            _resolve_runtime_from_pool_entry(
++                provider="copilot",
++                entry=entry,
++                requested_provider="copilot",
++                model_cfg={"default": "test-model"},
++            )
++        self.assertIn("disabled", str(ctx.exception))
++
++
++class TestNewTwoProbeAnthropicDisabled(unittest.TestCase):
++    """NEW-2 (proof-check-rerun-2026-09-03.md): ``doctor.py``'s
++    ``_probe_anthropic`` sends a raw httpx request straight to
++    api.anthropic.com using whatever ``get_anthropic_key()`` returns -- an
++    OAuth-shaped value surviving in ``ANTHROPIC_API_KEY``/``.env`` rode
++    through this probe even with the H1 client-builder fence up, because H1
++    guards the outbound client builders, not this standalone connectivity
++    check. Must return the disabled/no-op row and never call the HTTP
++    client at all.
++
++    ``_probe_anthropic`` is a closure nested inside ``run_doctor()`` (it
++    shares a locally-defined ``_ConnectivityResult`` namedtuple with sibling
++    probes, by design -- see the "Refactor" comment above ``_probe_openrouter``
++    in doctor.py), so it has no importable module-level name. Rather than
++    duplicate its guard logic in a test double (which could silently drift
++    from the real code) or run the entire multi-thousand-line ``run_doctor()``
++    end-to-end, this extracts the REAL compiled function straight out of
++    ``run_doctor.__code__.co_consts`` and rebinds it with a stand-in closure
++    cell for its one free variable -- the same "reconstruct a function from
++    ``__code__``" technique already used in this repo's own test suite (see
++    ``tests/cli/test_handoff_slow_dispatch_timeout.py``'s ``types.FunctionType``
++    rebind), extended one level to reach a function that was never itself
++    reachable as an attribute."""
++
++    @staticmethod
++    def _extract_probe_anthropic():
++        from hermes_cli import doctor as doctor_mod
++
++        target_code = None
++        for const in doctor_mod.run_doctor.__code__.co_consts:
++            if isinstance(const, types.CodeType) and const.co_name == "_probe_anthropic":
++                target_code = const
++                break
++        if target_code is None:
++            raise AssertionError(
++                "could not locate the _probe_anthropic nested code object "
++                "inside hermes_cli.doctor.run_doctor -- has it been renamed "
++                "or moved to module level?"
++            )
++        if target_code.co_freevars != ("_ConnectivityResult",):
++            raise AssertionError(
++                "_probe_anthropic's free variables changed shape "
++                f"(expected exactly ('_ConnectivityResult',), got "
++                f"{target_code.co_freevars}) -- update this test's closure "
++                "construction to match"
++            )
++        connectivity_result = collections.namedtuple(
++            "_ConnectivityResult", ["label", "lines", "issues"]
++        )
++        closure = (types.CellType(connectivity_result),)
++        return types.FunctionType(
++            target_code, doctor_mod.__dict__, "_probe_anthropic", None, closure
++        )
++
++    def test_probe_anthropic_returns_disabled_row_and_never_calls_httpx(self):
++        probe_anthropic = self._extract_probe_anthropic()
++
++        fake_env = {"ANTHROPIC_API_KEY": "cc-fake-oauth-token"}
++        with patch.dict(os.environ, fake_env, clear=False):
++            with patch("httpx.get") as mock_httpx_get:
++                result = probe_anthropic()
++
++        mock_httpx_get.assert_not_called()
++        self.assertEqual(result.label, "Anthropic API")
++        self.assertEqual(result.lines, [])
++        self.assertEqual(result.issues, [])
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tools/environments/local.py b/tools/environments/local.py
+index f876753..96c5937 100644
+--- a/tools/environments/local.py
++++ b/tools/environments/local.py
+@@ -431,7 +431,18 @@ def _build_provider_env_blocklist() -> frozenset:
+     # logging the user out of their interactive Claude sessions (#55878).
+     # It arrives via the registry loop above (anthropic api_key_env_vars),
+     # so remove it explicitly.
+-    blocked.discard("CLAUDE_CODE_OAUTH_TOKEN")
++    # HQ pilot T3d 2026-09-03: while the pilot guard is on, KEEP the token
++    # blocked from every Hermes-spawned child (the pilot never spawns `claude`).
++    try:
++        from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED as _hq_disabled
++    except ImportError:  # pragma: no cover
++        # HQ pilot H3 fix (proof-check-2026-09-03.md): fail CLOSED, not open.
++        # An import failure must never re-enable a blocked credential.
++        import sys as _sys
++        print("HQ pilot: guard import FAILED — failing CLOSED", file=_sys.stderr)
++        _hq_disabled = True
++    if not _hq_disabled:
++        blocked.discard("CLAUDE_CODE_OAUTH_TOKEN")
+     # BUZZ_* is deliberately NOT discarded here, even for Buzz-managed agents
+     # (BUZZ_MANAGED_AGENT set by the buzz-acp harness).  This blocklist is
+     # shared by every scrub surface — the terminal paths, execute_code, and
+@@ -830,6 +841,33 @@ _ALWAYS_STRIP_KEYS: frozenset[str] = frozenset({
+     "DAYTONA_API_KEY",
+ })
+ 
++# HQ pilot H2 fix (proof-check-2026-09-03.md), gated by NEW-5
++# (proof-check-rerun-2026-09-03.md): while the Anthropic/Claude-Code
++# credential fence is on, these three ride the Tier-2 blocklist normally but
++# that tier is SKIPPED on the inherit_credentials=True path -- a
++# model-driving `claude`/`codex`/`copilot` child spawned via
++# hermes_subprocess_env(inherit_credentials=True) would otherwise still
++# receive the operator's real Anthropic credential. Promote them to Tier 1
++# (unconditional strip) for the duration of the pilot.
++#
++# NEW-5 fix: these three names were hardcoded into _ALWAYS_STRIP_KEYS above,
++# not gated on the flag -- flipping HQ_PILOT_ANTHROPIC_DISABLED = False (the
++# documented single restore switch) would have left child spawns
++# permanently without Anthropic credentials. Add them conditionally, and
++# fail CLOSED on import failure: assume disabled, add them anyway.
++try:
++    from agent.anthropic_credentials import HQ_PILOT_ANTHROPIC_DISABLED as _hq_disabled_for_always_strip
++except ImportError:  # pragma: no cover
++    print("HQ pilot: guard import FAILED — failing CLOSED", file=sys.stderr)
++    _hq_disabled_for_always_strip = True
++
++if _hq_disabled_for_always_strip:
++    _ALWAYS_STRIP_KEYS = _ALWAYS_STRIP_KEYS | frozenset({
++        "ANTHROPIC_TOKEN",
++        "CLAUDE_CODE_OAUTH_TOKEN",
++        "ANTHROPIC_API_KEY",
++    })
++
+ 
+ def hermes_subprocess_env(*, inherit_credentials: bool = False) -> dict[str, str]:
+     """Build a sanitized environment dict for a spawned subprocess.
