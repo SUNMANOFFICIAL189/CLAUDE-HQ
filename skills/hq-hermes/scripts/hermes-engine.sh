@@ -41,18 +41,37 @@ set -euo pipefail
 readonly COLIMA_BIN="/opt/homebrew/bin/colima"
 DOCKER_BIN="$(command -v docker)"
 readonly DOCKER_BIN
+CURL_BIN="$(command -v curl)"
+readonly CURL_BIN
 
 # ---- constants ----------------------------------------------------------------
 readonly IMG="hermes-pilot:v1"
-readonly PROBE_FALLBACK_IMG="python:3.11-slim"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 SK_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly SK_DIR
 readonly DOCKER_BUILD_DIR="${SK_DIR}/docker"
+readonly DOCKERFILE_PATH="${DOCKER_BUILD_DIR}/Dockerfile"
+# M8 fix (proof-check-2026-09-03.md): the probe fallback image must be
+# referenced by the SAME digest as the Dockerfile's FROM line, checked with
+# `docker image inspect` first -- never pulled by a mutable tag (a by-tag
+# `docker run`/`docker pull` goes through the daemon, which the DOCKER-USER
+# egress kill does not filter, since that chain only governs FORWARDed
+# container traffic). Parsed once, here, from the Dockerfile itself so the
+# two references can never drift out of sync.
+PROBE_FALLBACK_IMG="$(
+    grep -m1 -oE '^FROM[[:space:]]+[^[:space:]]+@sha256:[0-9a-f]{64}' "${DOCKERFILE_PATH}" \
+        | awk '{print $2}'
+)"
+readonly PROBE_FALLBACK_IMG
+if [ -z "${PROBE_FALLBACK_IMG}" ]; then
+    printf '[hermes-engine] ERROR: %s\n' "could not parse a digest-pinned FROM line out of ${DOCKERFILE_PATH}. Refusing to guess a probe fallback image." >&2
+    exit 1
+fi
 readonly DOCKER_INFO_WAIT_SECS=90
 readonly PUBLIC_PROBE_URL="http://1.1.1.1"
 readonly OLLAMA_PROBE_URL="http://host.docker.internal:11434"
+readonly OLLAMA_HOST_PRECHECK_URL="http://127.0.0.1:11434/api/tags"
 # PR — the pilot's run/output directory, sibling of the pilot-tree worktree
 # ($HQ/run/pilot-tree/skills/hq-hermes -> up 3 -> $HQ/run -> hermes-pilot).
 PR_DIR="$(cd "${SK_DIR}/../../../hermes-pilot" && pwd)"
@@ -64,7 +83,8 @@ readonly LAST_PROBE_FILE="${PR_DIR}/engine-last-probe.txt"
 # before probe_egress()/positive_control_probe() are called.
 PROBE_IMAGE=""
 # Most recent probe lines, used by write_last_probe_file().
-LAST_PROBE_LINE_POSCTRL=""
+LAST_PROBE_LINE_POSCTRL1=""
+LAST_PROBE_LINE_POSCTRL2=""
 LAST_PROBE_LINE1=""
 LAST_PROBE_LINE2=""
 # Chain currently expected to be re-applied by trap_reapply_kill (empty =
@@ -142,15 +162,26 @@ trap_reapply_kill() {
 }
 
 # Picks the image to run the egress probes against: the pilot's own pinned
-# image if it exists yet, otherwise python:3.11-slim (documented fallback for
-# the first run, before hermes-pilot:v1 has been built).
+# image if it exists yet, otherwise the digest-pinned base image from the
+# Dockerfile (documented fallback for the first run, before hermes-pilot:v1
+# has been built). M8 fix: the fallback is checked with `docker image
+# inspect` first and this function fails closed (exit 1, plain reason) if
+# it is absent -- it is NEVER pulled by tag, which would go through the
+# daemon unfiltered by the DOCKER-USER egress kill.
 select_probe_image() {
     if "${DOCKER_BIN}" image inspect "${IMG}" >/dev/null 2>&1; then
         printf '%s' "${IMG}"
-    else
-        log "NOTE: image ${IMG} does not exist yet (first run) — using ${PROBE_FALLBACK_IMG} for the egress probe instead." 1>&2
-        printf '%s' "${PROBE_FALLBACK_IMG}"
+        return 0
     fi
+
+    log "NOTE: image ${IMG} does not exist yet (first run) — falling back to the digest-pinned base image ${PROBE_FALLBACK_IMG} for the egress probe instead." 1>&2
+    if "${DOCKER_BIN}" image inspect "${PROBE_FALLBACK_IMG}" >/dev/null 2>&1; then
+        printf '%s' "${PROBE_FALLBACK_IMG}"
+        return 0
+    fi
+
+    err "fallback probe image ${PROBE_FALLBACK_IMG} is not present locally. Refusing to pull it by tag (a by-tag pull goes through the daemon, unfiltered by the DOCKER-USER egress kill -- M8: proof-check-2026-09-03.md). Run '$(basename "$0") build-image' first (it pulls the exact pinned digest as part of the Docker build, with the wall intentionally down and the positive control watching), or pull it manually: docker pull ${PROBE_FALLBACK_IMG}"
+    return 1
 }
 
 # Runs a single egress probe INSIDE ${PROBE_IMAGE} against the given URL,
@@ -178,24 +209,59 @@ except Exception as e:
 ' "${url}"
 }
 
-# Positive control: call ONLY while the egress kill has already been removed
-# from the chain by the caller. Requires the probe to report exactly "LEAK".
-# If it reports BLOCKED (or anything else) with the wall down, the probe
-# itself is broken, or this VM has no outbound network path at all — either
-# way a later BLOCKED result could not be trusted, so this must fail loudly
-# rather than let the pilot proceed on an unfalsifiable check (Lesson 34).
-# Sets LAST_PROBE_LINE_POSCTRL. Does not touch iptables itself.
-positive_control_probe() {
-    local out
-    out="$(probe_egress "${PUBLIC_PROBE_URL}")"
-    log "positive control (wall DOWN, public internet, ${PUBLIC_PROBE_URL}) using ${PROBE_IMAGE}: ${out}"
-    LAST_PROBE_LINE_POSCTRL="positive-control (${PUBLIC_PROBE_URL}, wall down): ${out}"
-
-    if [ "${out}" != "LEAK" ]; then
-        err "positive control FAILED: probe_egress reported '${out}' with the egress kill REMOVED. Either the probe itself is broken, or this VM has no outbound network path to ${PUBLIC_PROBE_URL} at all — a later BLOCKED result from this probe cannot be trusted."
+# H5 fix (proof-check-2026-09-03.md): before trusting a LEAK/BLOCKED result
+# from the OLLAMA_PROBE_URL positive control, confirm the host itself is
+# actually serving Ollama. Runs on the HOST (not inside the probe
+# container) via a plain curl. Without this, a DNS/connection failure to
+# host.docker.internal would print "BLOCKED URLError" with or without the
+# wall (Lesson 34 class) and a passing positive control on probe 1 alone
+# would mask that probe 2 never proved anything.
+check_ollama_reachable_from_host() {
+    if ! "${CURL_BIN}" -s -m 3 "${OLLAMA_HOST_PRECHECK_URL}" >/dev/null 2>&1; then
+        err "host Ollama is not reachable at ${OLLAMA_HOST_PRECHECK_URL}. The ${OLLAMA_PROBE_URL} positive control cannot be trusted without a live Ollama on the host to leak to (Lesson 34 -- a probe that cannot fail proves nothing). Start Ollama on the host before running this subcommand."
         return 1
     fi
     return 0
+}
+
+# Positive control: call ONLY while the egress kill has already been removed
+# from the chain by the caller. Requires BOTH probe URLs to report exactly
+# "LEAK" -- H5 fix (proof-check-2026-09-03.md): the old positive control
+# only exercised PUBLIC_PROBE_URL, so probe 2 (host.docker.internal, a NAME
+# rather than an IP literal) had no positive control at all; a DNS failure
+# there prints "BLOCKED URLError" with or without the wall (Lesson 34
+# class). If either probe reports anything but LEAK with the wall down, the
+# probe itself is broken, this VM has no outbound network path, or
+# host.docker.internal cannot reach the host Ollama -- any of which means a
+# later BLOCKED result on that probe could not be trusted, so this must
+# fail loudly rather than let the pilot proceed on an unfalsifiable check.
+# Sets LAST_PROBE_LINE_POSCTRL1 / LAST_PROBE_LINE_POSCTRL2. Does not touch
+# iptables itself.
+positive_control_probe() {
+    if ! check_ollama_reachable_from_host; then
+        return 1
+    fi
+
+    local out1 out2
+    out1="$(probe_egress "${PUBLIC_PROBE_URL}")"
+    log "positive control (wall DOWN, public internet, ${PUBLIC_PROBE_URL}) using ${PROBE_IMAGE}: ${out1}"
+    LAST_PROBE_LINE_POSCTRL1="positive-control (${PUBLIC_PROBE_URL}, wall down): ${out1}"
+
+    out2="$(probe_egress "${OLLAMA_PROBE_URL}")"
+    log "positive control (wall DOWN, host Ollama, ${OLLAMA_PROBE_URL}) using ${PROBE_IMAGE}: ${out2}"
+    LAST_PROBE_LINE_POSCTRL2="positive-control (${OLLAMA_PROBE_URL}, wall down): ${out2}"
+
+    local failed=0
+    if [ "${out1}" != "LEAK" ]; then
+        err "positive control FAILED on ${PUBLIC_PROBE_URL}: probe_egress reported '${out1}' with the egress kill REMOVED. Either the probe itself is broken, or this VM has no outbound network path to ${PUBLIC_PROBE_URL} at all — a later BLOCKED result from this probe cannot be trusted."
+        failed=1
+    fi
+    if [ "${out2}" != "LEAK" ]; then
+        err "positive control FAILED on ${OLLAMA_PROBE_URL}: probe_egress reported '${out2}' with the egress kill REMOVED, even though the host pre-check confirmed Ollama is reachable at ${OLLAMA_HOST_PRECHECK_URL}. Either the probe is broken, or host.docker.internal cannot resolve/route to the host from inside the container — a later BLOCKED result from this probe cannot be trusted."
+        failed=1
+    fi
+
+    [ "${failed}" -eq 0 ]
 }
 
 # Runs the two negative egress probes (both must report a line starting with
@@ -242,8 +308,11 @@ write_last_probe_file() {
         printf 'subcommand: %s\n' "${subcommand}"
         printf 'timestamp_utc: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         printf 'probe_image: %s\n' "${PROBE_IMAGE}"
-        if [ -n "${LAST_PROBE_LINE_POSCTRL}" ]; then
-            printf '%s\n' "${LAST_PROBE_LINE_POSCTRL}"
+        if [ -n "${LAST_PROBE_LINE_POSCTRL1}" ]; then
+            printf '%s\n' "${LAST_PROBE_LINE_POSCTRL1}"
+        fi
+        if [ -n "${LAST_PROBE_LINE_POSCTRL2}" ]; then
+            printf '%s\n' "${LAST_PROBE_LINE_POSCTRL2}"
         fi
         if [ -n "${LAST_PROBE_LINE1}" ]; then
             printf '%s\n' "${LAST_PROBE_LINE1}"
@@ -310,14 +379,18 @@ cmd_build_image() {
 
     log "temporarily removing the egress kill on ${chain} so the build can reach the registry/daemon..."
     CURRENT_KILL_CHAIN="${chain}"
-    trap trap_reapply_kill EXIT
+    # H6 fix (proof-check-2026-09-03.md): EXIT alone does not cover
+    # SIGTERM/SIGHUP/SIGINT arriving during the wall-down window (e.g. the
+    # docker build below), which would leave the DROP rule off. Trap all
+    # four so any of them re-applies the kill.
+    trap trap_reapply_kill EXIT INT TERM HUP
     remove_kill_on_chain "${chain}"
 
     log "running the positive control while the wall is down for the build..."
     if ! positive_control_probe; then
         err "Re-applying the egress kill before exiting (never leave the kill removed)."
         apply_kill_on_chain "${chain}"
-        trap - EXIT
+        trap - EXIT INT TERM HUP
         CURRENT_KILL_CHAIN=""
         exit 1
     fi
@@ -327,7 +400,7 @@ cmd_build_image() {
     if ! "${DOCKER_BIN}" build -t "${IMG}" "${DOCKER_BUILD_DIR}"; then
         err "docker build failed. Re-applying the egress kill before exiting (never leave the kill removed)."
         apply_kill_on_chain "${chain}"
-        trap - EXIT
+        trap - EXIT INT TERM HUP
         CURRENT_KILL_CHAIN=""
         exit 1
     fi
@@ -337,7 +410,7 @@ cmd_build_image() {
 
     log "re-applying the egress kill on ${chain}..."
     apply_kill_on_chain "${chain}"
-    trap - EXIT
+    trap - EXIT INT TERM HUP
     CURRENT_KILL_CHAIN=""
 
     PROBE_IMAGE="${IMG}"
@@ -366,7 +439,9 @@ cmd_selftest() {
 
     log "selftest: removing the egress kill on ${chain} to run the positive control..."
     CURRENT_KILL_CHAIN="${chain}"
-    trap trap_reapply_kill EXIT
+    # H6 fix (proof-check-2026-09-03.md): trap every signal that can end
+    # this process during the wall-down window, not just normal EXIT.
+    trap trap_reapply_kill EXIT INT TERM HUP
     remove_kill_on_chain "${chain}"
 
     local pc_failed=0
@@ -374,7 +449,7 @@ cmd_selftest() {
 
     log "selftest: re-applying the egress kill on ${chain}..."
     apply_kill_on_chain "${chain}"
-    trap - EXIT
+    trap - EXIT INT TERM HUP
     CURRENT_KILL_CHAIN=""
 
     if [ "${pc_failed}" -ne 0 ]; then
