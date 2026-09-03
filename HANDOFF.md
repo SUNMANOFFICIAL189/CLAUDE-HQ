@@ -8,7 +8,7 @@
 - Schema: handoff/v1
 - Canonical path: /Users/sunil_rajput/claude-hq/HANDOFF.md
 - Constitution: /Users/sunil_rajput/claude-hq/CLAUDE.md + commander/COMMANDER.md + docs/ORGANIZATION.md
-- Last refreshed: 2026-09-03 20:10 +08 — Hermes eval + pilot P0 proof-checked CLEAN (re-run #3) — manual
+- Last refreshed: 2026-09-03 20:20 +08 — landed: main 43919af, hermes-pilot published — manual
 - Scope note: this is the HQ-infra handoff. The web-arm sub-project keeps its own at `skills/web-arm/HANDOFF.md`. **The Hermes pilot lives in a separate git worktree** `run/pilot-tree` (branch `hermes-pilot`); its living plan is `run/pilot-tree/skills/hq-hermes/PLAN-v2-2026-09-03.md` (v2.1f) — resume the pilot from THAT file plus the auto-memory note below, not from this handoff alone.
 
 ---
@@ -56,7 +56,7 @@ On 2026-09-03 Hermes Agent was evaluated read-only (four scouts + first-hand doc
 - HQ's proof-gate hook (`scripts/proof-gate.sh`) blocks any Bash command whose text matches `git … (publish|land)`-shaped patterns while `~/.claude/.proof-needed` is set — including a local file write whose sed text merely mentioned those words. Keep such words out of command strings; clear the flag properly via a clean `/proof-check` (the `PROOF_OK=1` prefix does not work — Lesson 8).
 
 ## Open Threads & Next Actions  (numbered; mark DONE in place, never delete)
-1. ⭐ NEXT (operator-confirmed 20:10): **LAND, then T6.** Land = `/sync` the main tree (5 files, preview done, no secrets) → publish `hermes-pilot` to GitHub as a new remote branch → vault sent. Then S2 = **T6** (sonnet, read-only mechanisms/schema ticket on `repos/hermes-agent` @ `hq-hardened` 4dee451: items a–l in PLAN v2.1j) preceded by a tiny **T3g** (enforce `HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE` as test-only — BACKLOG R1). Via `hq-foreman`, one wave per session; re-estimate token bands ×3–4.
+1. ⭐ NEXT (operator-confirmed 20:10; landing DONE 20:20 — main @ 43919af, `hermes-pilot` published @ 12f63a2, vault 0/0): S2 = **T6** (sonnet, read-only mechanisms/schema ticket on `repos/hermes-agent` @ `hq-hardened` 4dee451: items a–l in PLAN v2.1j) preceded by a tiny **T3g** (enforce `HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE` as test-only — BACKLOG R1). Via `hq-foreman`, one wave per session; re-estimate token bands ×3–4.
 2. Hermes pilot: fold `run/hermes-pilot/lessons-candidates.md` into LESSONS.md at T22 (or earlier on operator go): uv/brew gate gap; `timeout` absent; haiku Keychain misreport; `plutil -lint`; core-not-plugin; NEW: fence verify traces routes not readers; guard fallbacks default CLOSED.
 3. On or after **2026-09-16**, run the claude-mem cost re-measurement (baseline + escalation rule in `project_google_cloud_bill_trace_2026_09_02.md`). [carried]
 4. Decide whether `Bash` belongs back in the crg hook matcher (`02910ee` dropped it). Operator call. [carried]
@@ -71,7 +71,7 @@ On 2026-09-03 Hermes Agent was evaluated read-only (four scouts + first-hand doc
 ## Runtime / Environment
 - **Nothing pilot-related running.** Colima STOPPED (engine script leaves it down; `bash run/pilot-tree/skills/hq-hermes/scripts/hermes-engine.sh status` to check). Docker Desktop not running. Docker CLI context is now `colima` (was `default` — restore at uninstall). [firsthand][confirmed]
 - Pre-existing, unrelated to the pilot: Ollama at 127.0.0.1:11434 (llama3.2 only; the pilot's 64k coder model is NOT pulled yet — T7); Paperclip server on 127.0.0.1:3100 (PID 1307 earlier today); claude-mem worker (port 37777, per the 09-02 handoff — not re-verified today). [firsthand for Ollama/Paperclip][relayed for claude-mem]
-- Git: main tree `~/claude-hq` on `main` @ `5fedb35`, **4 modified tracked files uncommitted** (LESSONS.md, BACKLOG.md, hq-foreman/SKILL.md, watchdog/reminders.json) + this HANDOFF.md + untracked scratch; pilot worktree `run/pilot-tree` on `hermes-pilot` @ `8f79eac`, clean; Hermes checkout `repos/hermes-agent` on `hq-hardened` @ `a2427b7`, clean except the known case-collision file `contributors/emails/agent@Agents-Mac-mini.local`. [firsthand][confirmed]
+- Git: main tree `~/claude-hq` on `main` @ `43919af` = origin/main (clean, untracked scratch only); pilot worktree `run/pilot-tree` on `hermes-pilot` @ `12f63a2` = origin/hermes-pilot (published 20:20, clean); Hermes checkout `repos/hermes-agent` on `hq-hardened` @ `4dee451` (local only — gitignored checkout, never pushed), clean except the known case-collision file `contributors/emails/agent@Agents-Mac-mini.local`. [firsthand][confirmed]
 - Proof-gate flag `~/.claude/.proof-needed`: **CLEARED 20:07 +08** after re-run #3 CLEAN (T3e + T3f fixed 6 HIGH + 5 MEDIUM; 2 MEDIUM residuals in BACKLOG). NOTE: writing any file whose path contains `proof-check` re-arms the flag (hook regex) — clear it again after saving a review record. [firsthand][confirmed]
 - Hermes home `run/hermes-hq` exists (first-run dirs only: state.db, sessions, logs, empty skills; NO config.yaml/.env/auth.json); `~/.hermes` absent. [firsthand][confirmed]
 - Keychain: `claude-hermes-groq` present (pilot); `Claude Code-credentials` present (the item the fence protects). [firsthand][confirmed: presence only]
