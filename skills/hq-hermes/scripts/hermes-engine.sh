@@ -4,17 +4,22 @@
 # Subcommands:
 #   ensure       start colima (if not running), wait for docker, apply the VM-level
 #                egress kill, verify it with two fail-closed negative probes.
-#   build-image  temporarily lift the egress kill, run the positive control
-#                (proves the probe can see a real leak) while the wall is
-#                down for the build, build $IMG, re-apply the kill, re-verify
-#                with the two negative probes.
+#   build-image  temporarily lift the egress kill; pull the Dockerfile's
+#                pinned base image BY DIGEST if it isn't already present
+#                locally (NEW-3: breaks the clean-machine bootstrap deadlock
+#                without ever pulling by a mutable tag); run the positive
+#                control (proves the probe can see a real leak) while the
+#                wall is down for the build; build $IMG; re-apply the kill;
+#                re-verify with the two negative probes.
 #   selftest     positive control (remove kill, require LEAK) followed by the
 #                negative control (re-apply kill, require BLOCKED on both) —
 #                proves the probe mechanism itself works, not just that it
 #                printed the string we hoped for. Never starts colima.
 #   stop         colima stop; verify docker is no longer reachable.
 #   status       one-line report: colima / docker / egress-kill rule / image /
-#                last recorded probe results (if any).
+#                probe fallback digest (best-effort; never fatal, see
+#                resolve_probe_fallback_image) / last recorded probe results
+#                (if any).
 #   --engine docker-desktop   NOT implemented in this pilot (Docker Desktop must
 #                             never be started here). Prints a message, exit 2.
 #
@@ -51,23 +56,28 @@ readonly SCRIPT_DIR
 SK_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly SK_DIR
 readonly DOCKER_BUILD_DIR="${SK_DIR}/docker"
-readonly DOCKERFILE_PATH="${DOCKER_BUILD_DIR}/Dockerfile"
+# NEW-4 fix (proof-check-rerun-2026-09-03.md): test-only override so the
+# Dockerfile FROM parse (see resolve_probe_fallback_image() below) can be
+# exercised against a bogus path without ever touching the real Dockerfile.
+# Unset in normal use -- defaults to the real path.
+DOCKERFILE_PATH="${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE:-${DOCKER_BUILD_DIR}/Dockerfile}"
+readonly DOCKERFILE_PATH
 # M8 fix (proof-check-2026-09-03.md): the probe fallback image must be
 # referenced by the SAME digest as the Dockerfile's FROM line, checked with
 # `docker image inspect` first -- never pulled by a mutable tag (a by-tag
 # `docker run`/`docker pull` goes through the daemon, which the DOCKER-USER
 # egress kill does not filter, since that chain only governs FORWARDed
-# container traffic). Parsed once, here, from the Dockerfile itself so the
-# two references can never drift out of sync.
-PROBE_FALLBACK_IMG="$(
-    grep -m1 -oE '^FROM[[:space:]]+[^[:space:]]+@sha256:[0-9a-f]{64}' "${DOCKERFILE_PATH}" \
-        | awk '{print $2}'
-)"
-readonly PROBE_FALLBACK_IMG
-if [ -z "${PROBE_FALLBACK_IMG}" ]; then
-    printf '[hermes-engine] ERROR: %s\n' "could not parse a digest-pinned FROM line out of ${DOCKERFILE_PATH}. Refusing to guess a probe fallback image." >&2
-    exit 1
-fi
+# container traffic).
+#
+# NEW-4 fix (proof-check-rerun-2026-09-03.md): this used to be parsed right
+# here, eagerly, at script top level. A Dockerfile with no matching FROM
+# line made the bare grep pipeline itself "fail" under `set -euo pipefail`
+# (no match = exit 1) BEFORE the explicit fail-closed check that followed it
+# ever ran -- killing the whole script silently, with zero output, for
+# EVERY subcommand, including status/stop, neither of which needs this
+# value at all. Parsing now happens lazily and memoized, inside
+# resolve_probe_fallback_image() (below), called only from
+# select_probe_image() -- which only ensure/build-image/selftest invoke.
 readonly DOCKER_INFO_WAIT_SECS=90
 readonly PUBLIC_PROBE_URL="http://1.1.1.1"
 readonly OLLAMA_PROBE_URL="http://host.docker.internal:11434"
@@ -82,6 +92,12 @@ readonly LAST_PROBE_FILE="${PR_DIR}/engine-last-probe.txt"
 # Image the current probe run targets; set by select_probe_image()/build-image
 # before probe_egress()/positive_control_probe() are called.
 PROBE_IMAGE=""
+# Digest-pinned base image parsed from the Dockerfile's LAST FROM line, used
+# as select_probe_image()'s fallback when $IMG doesn't exist yet. Populated
+# lazily/memoized by resolve_probe_fallback_image() -- see that function and
+# DOCKERFILE_PATH above for the NEW-4 history of why this moved off the top
+# level.
+PROBE_FALLBACK_IMG=""
 # Most recent probe lines, used by write_last_probe_file().
 LAST_PROBE_LINE_POSCTRL1=""
 LAST_PROBE_LINE_POSCTRL2=""
@@ -168,10 +184,40 @@ trap_reapply_kill() {
 # inspect` first and this function fails closed (exit 1, plain reason) if
 # it is absent -- it is NEVER pulled by tag, which would go through the
 # daemon unfiltered by the DOCKER-USER egress kill.
+# NEW-4 fix (proof-check-rerun-2026-09-03.md): parses PROBE_FALLBACK_IMG
+# lazily (only called from select_probe_image(), so status/stop never run
+# it) and memoized (a second call is a no-op). Tolerates a no-match FROM
+# line with `|| true` on the pipeline -- under `set -euo pipefail` an
+# untolerated no-match previously made the pipeline itself "fail" before the
+# explicit check below ever ran, killing the whole script silently. Parses
+# the LAST FROM line: a multi-stage Dockerfile's final stage is the one
+# whose base image actually ships.
+resolve_probe_fallback_image() {
+    if [ -n "${PROBE_FALLBACK_IMG}" ]; then
+        return 0
+    fi
+    local parsed
+    parsed="$(
+        grep -oE '^FROM[[:space:]]+[^[:space:]]+@sha256:[0-9a-f]{64}' "${DOCKERFILE_PATH}" 2>/dev/null \
+            | awk '{print $2}' \
+            | tail -n1 || true
+    )"
+    if [ -z "${parsed}" ]; then
+        err "could not parse a digest-pinned FROM line out of ${DOCKERFILE_PATH}. Refusing to guess a probe fallback image."
+        return 1
+    fi
+    PROBE_FALLBACK_IMG="${parsed}"
+    return 0
+}
+
 select_probe_image() {
     if "${DOCKER_BIN}" image inspect "${IMG}" >/dev/null 2>&1; then
         printf '%s' "${IMG}"
         return 0
+    fi
+
+    if ! resolve_probe_fallback_image; then
+        return 1
     fi
 
     log "NOTE: image ${IMG} does not exist yet (first run) — falling back to the digest-pinned base image ${PROBE_FALLBACK_IMG} for the egress probe instead." 1>&2
@@ -180,7 +226,14 @@ select_probe_image() {
         return 0
     fi
 
-    err "fallback probe image ${PROBE_FALLBACK_IMG} is not present locally. Refusing to pull it by tag (a by-tag pull goes through the daemon, unfiltered by the DOCKER-USER egress kill -- M8: proof-check-2026-09-03.md). Run '$(basename "$0") build-image' first (it pulls the exact pinned digest as part of the Docker build, with the wall intentionally down and the positive control watching), or pull it manually: docker pull ${PROBE_FALLBACK_IMG}"
+    # NEW-3 fix (proof-check-rerun-2026-09-03.md): the old hint here told the
+    # user to "run build-image first" -- but build-image called this exact
+    # function at this exact point, before it ever lowered the wall, so a
+    # clean machine hit the identical dead end from INSIDE build-image
+    # (self-referential bootstrap deadlock). build-image now pulls this
+    # digest itself once the wall is already down for the build (see
+    # cmd_build_image), so the hint below is a real, working recovery.
+    err "fallback probe image ${PROBE_FALLBACK_IMG} is not present locally. Refusing to pull it by tag (a by-tag pull goes through the daemon, unfiltered by the DOCKER-USER egress kill -- M8: proof-check-2026-09-03.md). Run '$(basename "$0") build-image': it pulls this exact pinned digest itself, under the wall-down window it already opens for its positive control and the docker build. Or pull it manually while the wall is down: docker pull ${PROBE_FALLBACK_IMG}"
     return 1
 }
 
@@ -375,9 +428,7 @@ cmd_build_image() {
     local chain
     chain="$(detect_chain)"
 
-    PROBE_IMAGE="$(select_probe_image)"
-
-    log "temporarily removing the egress kill on ${chain} so the build can reach the registry/daemon..."
+    log "temporarily removing the egress kill on ${chain} so the build (and, if needed, the pinned-digest pull below) can reach the registry/daemon..."
     CURRENT_KILL_CHAIN="${chain}"
     # H6 fix (proof-check-2026-09-03.md): EXIT alone does not cover
     # SIGTERM/SIGHUP/SIGINT arriving during the wall-down window (e.g. the
@@ -385,6 +436,40 @@ cmd_build_image() {
     # four so any of them re-applies the kill.
     trap trap_reapply_kill EXIT INT TERM HUP
     remove_kill_on_chain "${chain}"
+
+    # NEW-3 fix (proof-check-rerun-2026-09-03.md): on a clean machine
+    # neither $IMG nor the pinned base image exist locally yet, so calling
+    # select_probe_image() here (as this used to, BEFORE the wall came down)
+    # would refuse -- it never pulls by tag -- and dead-end the user on "run
+    # build-image first" from INSIDE build-image itself. Break that
+    # bootstrap deadlock: now that the wall is already down for the build,
+    # pull the pinned base by its exact DIGEST (never a tag -- M8: a by-tag
+    # pull is not content-pinned) if it isn't already present, then let
+    # select_probe_image() resolve normally.
+    if ! resolve_probe_fallback_image; then
+        apply_kill_on_chain "${chain}"
+        trap - EXIT INT TERM HUP
+        CURRENT_KILL_CHAIN=""
+        exit 1
+    fi
+    if ! "${DOCKER_BIN}" image inspect "${PROBE_FALLBACK_IMG}" >/dev/null 2>&1; then
+        log "pinned base image ${PROBE_FALLBACK_IMG} is not present locally — pulling it now, by digest, while the wall is down for the build..."
+        if ! "${DOCKER_BIN}" pull "${PROBE_FALLBACK_IMG}"; then
+            err "failed to pull ${PROBE_FALLBACK_IMG}. Re-applying the egress kill before exiting (never leave the kill removed)."
+            apply_kill_on_chain "${chain}"
+            trap - EXIT INT TERM HUP
+            CURRENT_KILL_CHAIN=""
+            exit 1
+        fi
+    fi
+
+    if ! PROBE_IMAGE="$(select_probe_image)"; then
+        err "Re-applying the egress kill before exiting (never leave the kill removed)."
+        apply_kill_on_chain "${chain}"
+        trap - EXIT INT TERM HUP
+        CURRENT_KILL_CHAIN=""
+        exit 1
+    fi
 
     log "running the positive control while the wall is down for the build..."
     if ! positive_control_probe; then
@@ -508,6 +593,20 @@ cmd_status() {
         log "image ${IMG}: present"
     else
         log "image ${IMG}: absent"
+    fi
+
+    # NEW-4 fix (proof-check-rerun-2026-09-03.md): report the Dockerfile-
+    # parsed probe fallback digest too, but never let a malformed Dockerfile
+    # break `status` itself. resolve_probe_fallback_image() already prints
+    # its own explicit fail-closed message (via err(), to stderr) on
+    # failure; treat that as informational here, not fatal -- status has
+    # nothing else that depends on it.
+    if resolve_probe_fallback_image; then
+        if "${DOCKER_BIN}" image inspect "${PROBE_FALLBACK_IMG}" >/dev/null 2>&1; then
+            log "probe fallback image (${PROBE_FALLBACK_IMG}): present"
+        else
+            log "probe fallback image (${PROBE_FALLBACK_IMG}): absent"
+        fi
     fi
 
     if [ -f "${LAST_PROBE_FILE}" ]; then
