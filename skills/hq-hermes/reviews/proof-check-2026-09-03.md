@@ -1,0 +1,36 @@
+# /proof-check — Hermes pilot P0 fence code (2026-09-03, ~15:50 +08)
+
+**Scope:** `repos/hermes-agent` diff `v2026.8.31..hq-hardened` (c139e49, 32c3692, aa4b221, a2427b7) + `skills/hq-hermes/scripts/hermes-engine.sh` + `docker/Dockerfile`.
+**Independence:** fresh Opus reviewer, read-only, one `hermes doctor` run under a closed proxy (Codex unavailable — CLI ENOENT). 154k tokens, 38 reads.
+**Verdict:** **0 CRITICAL · 6 HIGH · 5 MEDIUM · 5 LOW → gate CLOSED.** Reviewer: "do not proceed to a live pilot run until findings 1, 2 and 3 are closed — each is a small, local fix." Fixes are a separate operator-approved step (Lesson 17); re-run `/proof-check` after.
+**Foreman triage (verified against the code where cheap):** all six HIGH are REAL. H3 is the foreman's own fail-open fallback pattern in T3c/T3d — a Lesson-26-class mistake, now recorded. T5's blind verify had passed this code as PASS_WITH_NOTES; the proof-check's wider blast radius (endpoint routing, `inherit_credentials` spawn sites, import fallbacks, the second provider registry) found what a census of *readers* could not — the readers are guarded; the *routes around* them were not.
+
+## 🟠 HIGH (must fix before any live run)
+1. **OAuth guard sits on the LAST branch of a five-way chain** — `agent/anthropic_adapter.py:739-790 build_anthropic_client`: `_is_kimi_coding_endpoint` → `_requires_bearer_auth` → `_is_third_party_anthropic_endpoint` (true for ANY base_url without `anthropic.com`, incl. `*.claude.com` which `runtime_provider.py:315` allows) → `elif _is_oauth_token(api_key)` (guard) → else. An OAuth-shaped token via `--api-key`, config `api_key`, `ANTHROPIC_API_KEY`, or the Azure branch reaches a third-party host silently. **Fix:** guard at the TOP of `build_anthropic_client` (raise while disabled, before any endpoint branching).
+2. **`inherit_credentials=True` bypasses the T3d child-env fix** — `tools/environments/local.py:894-897 hermes_subprocess_env`: Tier-2 blocklist skipped when `inherit_credentials=True`; five live spawn sites (`tui_gateway/host_supervisor.py:339`, `tui_gateway/methods_tools.py:434`, `tui_gateway/server.py:480`, `agent/transports/codex_app_server.py:90`, `agent/copilot_acp_client.py:157`). **Fix:** add `ANTHROPIC_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY` to `_ALWAYS_STRIP_KEYS` (Tier 1) while the guard is on.
+3. **Import fallbacks fail OPEN** — `tools/environments/local.py:436-442`, `hermes_cli/auth.py:628-632`, `hermes_cli/web_server.py:10924-10930` and `:10998-11002`: `except ImportError: … = False`; in `local.py` the fallback then RE-ENABLES `blocked.discard("CLAUDE_CODE_OAUTH_TOKEN")` (import-time, cached once per process). **Fix:** default `True` (fail closed) at all four sites; log loudly on import failure.
+4. **T3 removed plugin dirs but not the subscription-auth paths** — `hermes_cli/auth.py:259` (`openai-codex`), `:298` (`copilot`) remain in `PROVIDER_REGISTRY` with the ChatGPT device-code login (`auth.py:3846-4147`); `agent/transports/codex_app_server.py` + `agent/copilot_acp_client.py` still imported (`auxiliary_client.py`, `agent_runtime_helpers.py:2741`); `hermes doctor` printed "⚠ OpenAI Codex auth (not logged in)". The Codex/Copilot fence is cosmetic. **Fix:** guard those registry entries / login flows the same way, or state the fence as Anthropic-only.
+5. **Engine probe 2 has no positive control** — `hermes-engine.sh:188-199` vs `:213-215`: the positive control probes only `http://1.1.1.1`; probe 2 (`host.docker.internal:11434`) is a NAME — a DNS failure prints `BLOCKED URLError` with or without the wall (Lesson 34 class). **Fix:** positive control on BOTH URLs; fail if probe 2 is BLOCKED with the wall down.
+6. **EXIT trap does not cover signals** — `hermes-engine.sh:313, 369`: `trap … EXIT` only; SIGTERM/SIGHUP during the wall-down `docker build` window leaves the DROP rule off. **Fix:** `trap trap_reapply_kill EXIT INT TERM HUP`.
+
+## 🟡 MEDIUM (→ BACKLOG)
+7. Three independent copies of `HQ_PILOT_ANTHROPIC_DISABLED` (`anthropic_credentials.py:44`, `anthropic_adapter.py:115`, `credential_pool.py:48`) — partial flip = half-open fence, no error. Fix: single definition, imported.
+8. `ensure` may pull `python:3.11-slim` BY TAG via the daemon (DOCKER-USER filters forwarded traffic, not daemon pulls) on a first run and then print "egress kill verified". Fix: pin the fallback by digest + `docker image inspect`, fail closed if absent.
+9. DROP rule verified once; a daemon restart recreates `DOCKER-USER` without it; `detect_chain()` treats any ssh/sudo failure as "use FORWARD" silently. (Wrapper calls `ensure` per job, which re-applies — mitigates but no monitor.)
+10. `_hq_log_disabled` is `print()` to stderr — swallowed by any parent capturing stderr; no file log, no counter.
+11. Second provider registry `hermes_cli/providers.py:102-105,553` (`HERMES_OVERLAYS["anthropic"].extra_env_vars`) disagrees with the guarded one; consumers today display-only.
+
+## 🟢 LOW
+`--engine` rejected for any value (fine; usage text implies otherwise) · `DOCKER_BIN` under `set -e` exits silently if docker absent · `COLIMA_BIN` hardcoded · `create_anthropic_message` guard effectively dead (prevented upstream) · `--network host` would bypass DOCKER-USER (nothing uses it).
+
+## ✅ Solid (verified)
+Every Anthropic credential ACQUISITION primitive guarded (Keychain :284, credentials file :350, `.anthropic_oauth.json` :1108, writers :645/:1139, refresh POST :436/:515, `claude` spawns `anthropic_credentials.py:894` + `anthropic_adapter.py:506/533`, PKCE :975, pool resolver :769, `resolve_anthropic_token` :836); main runtime path closed (`runtime_provider.py:1734/:2333` → `AuthError`); pool re-seeding closed on both routes; no secret ever logged (20 call sites pass names only); plugin removal real with zero dangling refs; `env_passthrough` now refuses the token; probe design honest (HTTPError→LEAK, infra failure propagates, IP-literal probe 1, fail-closed verify); Dockerfile digest-pinned, non-root, no curl|sh.
+
+## Contract coverage
+A1 fail-closed **OPEN** (H3) · A2 detection==enforcement **OPEN** (H1, H2, H4) · A3 universe **partial** (H2) · A4 loud **[x] w/ caveat** (M10) · A5 unbypassable **OPEN** (M7, H1) · B1 **[x]** · B2 **[x]** · B3 **[ ]** (H3) · B5 classification **[x]** / enforcement **[ ]** (H1) · C: kill on ensure **[x]**; EXIT trap **[x] exits / [ ] signals** (H6); DNS masquerade **[x] probe 1 / [ ] probe 2** (H5); positive control **[x]**; fail-closed **[x]**; Docker Desktop refused **[x]**; no eval **[x]**; chain rebuild **OPEN** (M9).
+
+## Loose ends
+Engine not executed (colima stopped); probe 2 DNS behaviour on this VM unconfirmed; process env not inspected for the two token names; MCP launcher env + `docker.py:1638` forwarding not traced; `agent/secret_scope.py`, onepassword secret source, cron/delegate child paths not reviewed; **no tests accompany the four commits — the fence has zero regression coverage**; whether `ANTHROPIC_API_KEY` should also be fenced (deliberately allowed; it is the channel H1 rides).
+
+## Disposition
+Gate CLOSED. Next = fix ticket **T3e** (sonnet; H1–H6 + M7, M8; the reviewer's fixes are local and exact) → commit on `hq-hardened` + `hermes-pilot` → re-run `/proof-check` → on clean pass `rm -f ~/.claude/.proof-needed` → `/sync` main tree → push `hermes-pilot`. M9–M11 + LOWs filed to BACKLOG.
