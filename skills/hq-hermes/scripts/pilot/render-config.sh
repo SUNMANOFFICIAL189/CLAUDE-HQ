@@ -38,7 +38,7 @@
 # argument must physically resolve (`cd ... && pwd -P`, symlinks and `..`
 # followed) to an EXISTING directory under $PR (the pilot's run/output
 # tree) -- else exit 2 before anything is read or written. On acceptance,
-# the rendered config gets `terminal.cwd: "<resolved dir>"` and
+# the rendered config gets `terminal.cwd: "/workspace"` (container-side; the host dir is the volume source) and
 # `terminal.docker_volumes: ["<resolved dir>:/workspace"]`; without
 # --workdir, `terminal.docker_volumes` stays `[]` and no `terminal.cwd` key
 # is written at all.
