@@ -441,6 +441,31 @@ index 963fe06..a47a56d 100644
      import time as _time
  
      issuer = "https://auth.openai.com"
+diff --git a/hermes_cli/config.py b/hermes_cli/config.py
+index f36907d..1de0927 100644
+--- a/hermes_cli/config.py
++++ b/hermes_cli/config.py
+@@ -44,6 +44,8 @@ logger = logging.getLogger(__name__)
+ # every time. Cleared automatically when the file changes (different mtime).
+ _CONFIG_PARSE_WARNED: set = set()
+ 
++HQ_PILOT_CONFIG_FAIL_CLOSED = True  # HQ pilot T8b 2026-09-04: a config file that exists but fails to parse must never fall back to defaults
++
+ 
+ def _backup_corrupt_config(config_path: Path) -> Optional[Path]:
+     """Preserve a corrupted ``config.yaml`` by copying it to a timestamped ``.bak``.
+@@ -4017,6 +4019,11 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
+                     e,
+                     fallback="last-known-good" if lkg is not None else "defaults",
+                 )
++                if HQ_PILOT_CONFIG_FAIL_CLOSED:
++                    raise RuntimeError(
++                        "HQ pilot: config.yaml exists but failed to parse — "
++                        "refusing to fall back to DEFAULT_CONFIG"
++                    ) from e
+                 if lkg is not None:
+                     # save_config() stores the pre-expansion normalized dict
+                     # (env-ref templates preserved); the load path stores the
 diff --git a/hermes_cli/doctor.py b/hermes_cli/doctor.py
 index 1af14d3..b3ce676 100644
 --- a/hermes_cli/doctor.py
@@ -1701,10 +1726,10 @@ new file mode 100644
 index 0000000..e69de29
 diff --git a/tests/hq_pilot/test_fence.py b/tests/hq_pilot/test_fence.py
 new file mode 100644
-index 0000000..212bc11
+index 0000000..64223eb
 --- /dev/null
 +++ b/tests/hq_pilot/test_fence.py
-@@ -0,0 +1,298 @@
+@@ -0,0 +1,363 @@
 +"""Regression tests for the HQ pilot Anthropic/Claude-Code credential fence.
 +
 +Written against skills/hq-hermes/reviews/proof-check-2026-09-03.md (Wave 3,
@@ -1719,6 +1744,7 @@ index 0000000..212bc11
 +import collections
 +import os
 +import re
++import shutil
 +import sys
 +import types
 +import unittest
@@ -1999,6 +2025,70 @@ index 0000000..212bc11
 +        self.assertEqual(result.label, "Anthropic API")
 +        self.assertEqual(result.lines, [])
 +        self.assertEqual(result.issues, [])
++
++
++class TestConfigFailClosedOnParseFailure(unittest.TestCase):
++    """C1 (proof-check-s3-2026-09-04.md, CRITICAL): a config.yaml that
++    EXISTS but fails to parse must never silently fall back to
++    DEFAULT_CONFIG (terminal.backend: "local", approvals.deny: [],
++    approvals.mode: "smart", docker_network: True, auxiliary.free_only:
++    False, ...). ``hermes_cli.config.HQ_PILOT_CONFIG_FAIL_CLOSED`` gates a
++    ``raise RuntimeError(...)`` inside ``_load_config_impl``'s ``except``
++    branch, right after ``_warn_config_parse_failure()`` -- before the
++    upstream last-known-good/DEFAULT_CONFIG fallback logic ever runs. A
++    MISSING config.yaml is a different code path entirely (no ``except``
++    is ever entered) and must keep the existing first-run defaults
++    behaviour -- asserted by the second test below."""
++
++    def setUp(self):
++        self._tmp_home = tempfile.mkdtemp(prefix="hq-fence-test-c1-")
++        self.addCleanup(shutil.rmtree, self._tmp_home, ignore_errors=True)
++        self._env_patcher = patch.dict(
++            os.environ, {"HERMES_HOME": self._tmp_home}, clear=False
++        )
++        self._env_patcher.start()
++        self.addCleanup(self._env_patcher.stop)
++        self._clear_config_load_caches()
++        self.addCleanup(self._clear_config_load_caches)
++
++    @staticmethod
++    def _clear_config_load_caches():
++        """Reset every module-level memo hermes_cli.config keeps keyed by
++        config path. Each test uses its own throw-away HERMES_HOME so a
++        real collision is unlikely, but load_config()'s cache (keyed on
++        (mtime_ns, size)) and the last-known-good/parse-warned memos are
++        process-lifetime globals -- clearing them here means this test's
++        result can never be masked by a stale entry left by an earlier
++        test or an earlier load of the same path."""
++        import hermes_cli.config as config_mod
++
++        config_mod._LOAD_CONFIG_CACHE.clear()
++        config_mod._RAW_CONFIG_CACHE.clear()
++        config_mod._LAST_EXPANDED_CONFIG_BY_PATH.clear()
++        config_mod._CONFIG_PARSE_WARNED.clear()
++
++    def test_config_parse_failure_raises(self):
++        import hermes_cli.config as config_mod
++
++        self.assertTrue(config_mod.HQ_PILOT_CONFIG_FAIL_CLOSED)
++
++        config_path = Path(self._tmp_home) / "config.yaml"
++        config_path.write_text("model: [unclosed", encoding="utf-8")
++
++        with self.assertRaises(RuntimeError) as ctx:
++            config_mod.load_config()
++
++        self.assertIn("failed to parse", str(ctx.exception))
++
++    def test_config_missing_yields_defaults(self):
++        import hermes_cli.config as config_mod
++
++        config_path = Path(self._tmp_home) / "config.yaml"
++        self.assertFalse(config_path.exists())
++
++        result = config_mod.load_config()
++
++        self.assertEqual(result["terminal"]["backend"], "local")
 +
 +
 +if __name__ == "__main__":

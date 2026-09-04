@@ -1,3 +1,4 @@
+_config_version
 agent.max_turns
 approvals.cron_mode
 approvals.deny

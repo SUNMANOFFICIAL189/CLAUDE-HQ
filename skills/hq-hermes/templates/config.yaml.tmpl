@@ -13,7 +13,17 @@
 #                          for ollama (no key needed), replaced with a providers:
 #                          block for groq
 #
-# Keys set here are EXACTLY the T8 (PLAN v2.1l) list — nothing else.
+# Keys set here are EXACTLY the T8 (PLAN v2.1l) list plus T8b's
+# _config_version stamp — nothing else.
+
+# HQ pilot T8b (proof-check-s3-2026-09-04.md HIGH-3): pin the schema version
+# this template was written against so a first real `hermes chat`'s
+# migrate_config()/_persist_migration()/save_config() ladder (which strips
+# default-equal keys on write) does not silently turn "Config version
+# outdated" into a new steady state the C1/C1b fence audits stop matching.
+# Value = latest_ver from check_config_version() at authoring time
+# (read-only; never re-derived by the renderer itself).
+_config_version: 39
 
 model:
   provider: "custom"

@@ -24,8 +24,16 @@
 #                             never be started here). Prints a message, exit 2.
 #
 # Environment (test-only): HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE points the
-# Dockerfile FROM parse at another file; it is refused (exit 2) unless the file
-# is under this skill directory or HERMES_ENGINE_SELFTEST=1 is also set (R1).
+# Dockerfile FROM parse at another file; it is refused (exit 2) unless the
+# FULLY resolved path (directory physically resolved via `cd ... && pwd -P`,
+# basename appended) is under this skill directory AND that resolved file
+# exists AND the override argument's final path component is not itself a
+# symlink (H1 fix, proof-check-s3-2026-09-04.md: a prior escape-hatch env var
+# disabled this entire fence unconditionally at the same trust level as the
+# override it fenced, and the directory-only check it fell back to let a
+# symlinked basename under $SK escape to anywhere on disk — MEDIUM-2 in the
+# same review. No test or caller ever set that escape hatch; it has been
+# removed entirely, not just gated further).
 #
 # Egress probe method: a python3 -c one-liner run INSIDE the target image via
 # `docker run` (python3 is present in both hermes-pilot:v1 and its
@@ -64,23 +72,44 @@ readonly DOCKER_BUILD_DIR="${SK_DIR}/docker"
 # Dockerfile FROM parse (see resolve_probe_fallback_image() below) can be
 # exercised against a bogus path without ever touching the real Dockerfile.
 # Unset in normal use -- defaults to the real path.
-# R1 fix (proof-check-rerun3-2026-09-03.md, T3g): the override is enforced as
-# TEST-ONLY. It is honoured only when HERMES_ENGINE_SELFTEST=1, or when the
-# file it names resolves (physically, symlinks followed) to somewhere under
-# this skill's own directory. Anything else is refused with exit 2 before any
-# subcommand runs -- a job environment must never be able to steer which
-# image the probes run in (or build-image pulls) while the egress wall is down.
-if [ -n "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE:-}" ] && [ "${HERMES_ENGINE_SELFTEST:-0}" != "1" ]; then
-    _hq_ovr_dir="$(cd "$(dirname "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE}")" 2>/dev/null && pwd -P)" || _hq_ovr_dir=""
+# H1 fix (proof-check-s3-2026-09-04.md, T8b): the prior unconditional
+# escape-hatch env var has been REMOVED -- it disabled this fence at the
+# same trust level as the override it was meant to fence, and no test or
+# caller ever used it. The override is now honoured ONLY when ALL of:
+#   (1) its directory component physically resolves (`cd ... && pwd -P`,
+#       symlinks and `..` followed) to somewhere under this skill's own
+#       directory ($SK_DIR);
+#   (2) the resulting fully-resolved path (that directory + the override's
+#       basename) exists as a regular-ish file (`-f`);
+#   (3) the override argument's OWN final path component is not itself a
+#       symlink (`-L` on the unresolved argument, lstat semantics -- a
+#       symlink basename living physically under $SK but pointing anywhere
+#       else on disk is refused; MEDIUM-2 in the same review: the prior
+#       fence validated the directory only, never the final component).
+# Anything else is refused with exit 2 before any subcommand runs -- a job
+# environment must never be able to steer which image the probes run in (or
+# build-image pulls) while the egress wall is down.
+if [ -n "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE:-}" ]; then
+    _hq_ovr_dirname="$(dirname "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE}")"
+    _hq_ovr_base="$(basename "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE}")"
+    _hq_ovr_dir="$(cd "${_hq_ovr_dirname}" 2>/dev/null && pwd -P)" || _hq_ovr_dir=""
     _hq_sk_phys="$(cd "${SK_DIR}" && pwd -P)"
-    case "${_hq_ovr_dir}/" in
-        "${_hq_sk_phys}/"*) ;;
-        *)
-            printf '[hermes-engine] refusing HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE=%s: it does not resolve to a file under %s and HERMES_ENGINE_SELFTEST is not 1 (this override is test-only).\n' "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE}" "${_hq_sk_phys}" >&2
-            exit 2
-            ;;
-    esac
-    unset _hq_ovr_dir _hq_sk_phys
+    _hq_ovr_ok=0
+    if [ -n "${_hq_ovr_dir}" ]; then
+        case "${_hq_ovr_dir}/" in
+            "${_hq_sk_phys}/"*)
+                _hq_ovr_resolved="${_hq_ovr_dir}/${_hq_ovr_base}"
+                if [ -f "${_hq_ovr_resolved}" ] && [ ! -L "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE}" ]; then
+                    _hq_ovr_ok=1
+                fi
+                ;;
+        esac
+    fi
+    if [ "${_hq_ovr_ok}" -ne 1 ]; then
+        printf '[hermes-engine] refusing HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE=%s: it must physically resolve to an existing, non-symlink file under %s (this override is test-only).\n' "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE}" "${_hq_sk_phys}" >&2
+        exit 2
+    fi
+    unset _hq_ovr_dirname _hq_ovr_base _hq_ovr_dir _hq_sk_phys _hq_ovr_ok _hq_ovr_resolved
 fi
 DOCKERFILE_PATH="${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE:-${DOCKER_BUILD_DIR}/Dockerfile}"
 readonly DOCKERFILE_PATH
