@@ -214,7 +214,7 @@ fi
 # nonexistent directory fails the `cd` itself; an existing one outside
 # $PR_DIR fails the prefix check below. Either way -> exit 2 before
 # anything is read or written. ------------------------------------------
-PR_PHYS="$(cd "$PR_DIR" && pwd -P)"
+PR_PHYS="$(cd "$PR_DIR" 2>/dev/null && pwd -P)" || PR_PHYS=""
 if [ -n "$WORKDIR_ARG" ]; then
     _wd_resolved="$(cd "$WORKDIR_ARG" 2>/dev/null && pwd -P)" || _wd_resolved=""
     _wd_ok=0
@@ -236,7 +236,10 @@ else
 fi
 
 if [ -n "$WORKDIR" ]; then
-    WORKDIR_BLOCK="  cwd: \"$WORKDIR\"
+    case "$WORKDIR" in *\"*|*\\*) echo "render-config.sh: --workdir must not contain quotes or backslashes" >&2; exit 2;; esac
+    # T8e: cwd is the CONTAINER-side path (Hermes discards a host path and falls
+    # back to /root -- re-run #3 NEW-M1); the host dir lives only in the volume.
+    WORKDIR_BLOCK="  cwd: \"/workspace\"
   docker_volumes: [\"$WORKDIR:/workspace\"]"
 else
     WORKDIR_BLOCK="  docker_volumes: []"
@@ -374,17 +377,20 @@ else:
     elif not isinstance(cwd, str) or not cwd:
         errors.append(f"terminal.cwd is not a non-empty string (got: {cwd!r})")
     else:
-        cwd_phys = os.path.realpath(cwd)
-        if not os.path.isdir(cwd_phys) or not (
-            cwd_phys == PR_DIR_PHYS or cwd_phys.startswith(PR_DIR_PHYS + os.sep)
-        ):
-            errors.append(
-                f"terminal.cwd does not resolve to an existing directory under {PR_DIR_PHYS} (got: {cwd!r})"
-            )
-        if terminal.get("docker_volumes") != [f"{cwd}:/workspace"]:
-            errors.append(
-                f"terminal.docker_volumes != ['{cwd}:/workspace'] (got: {terminal.get('docker_volumes')!r})"
-            )
+        # T8e: cwd is the CONTAINER path; the host job dir is the single volume
+        # source and must be an existing directory under $PR.
+        if cwd != "/workspace":
+            errors.append(f"terminal.cwd must be '/workspace' (got: {cwd!r})")
+        vols = terminal.get("docker_volumes")
+        if not (isinstance(vols, list) and len(vols) == 1 and isinstance(vols[0], str) and vols[0].endswith(":/workspace")):
+            errors.append(f"terminal.docker_volumes must be exactly ['<host job dir>:/workspace'] (got: {vols!r})")
+        else:
+            host = vols[0][: -len(":/workspace")]
+            host_phys = os.path.realpath(host)
+            if not os.path.isdir(host_phys) or not (
+                host_phys == PR_DIR_PHYS or host_phys.startswith(PR_DIR_PHYS + os.sep)
+            ):
+                errors.append(f"volume source does not resolve to an existing directory under {PR_DIR_PHYS} (got: {host!r})")
 
     try:
         from hermes_cli.config_defaults import DEFAULT_CONFIG

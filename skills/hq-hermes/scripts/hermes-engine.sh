@@ -68,6 +68,9 @@ set -euo pipefail
 # nothing downstream ever reconstructs the vulnerable pattern under either
 # name.
 unset DOCKERFILE_PATH
+# T8e: the internal name is unset too, so an exported _HQ_DOCKERFILE_PATH can never
+# survive into the fence's default branch (re-run #3 NEW-H1).
+unset _HQ_DOCKERFILE_PATH
 
 # ---- resolved binaries (once) ------------------------------------------------
 readonly COLIMA_BIN="/opt/homebrew/bin/colima"
@@ -148,7 +151,9 @@ if [ -n "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE:-}" ]; then
     _HQ_DOCKERFILE_PATH="${_hq_ovr_resolved}"
     unset _hq_ovr_stripped _hq_ovr_dirname _hq_ovr_base _hq_ovr_dir _hq_sk_phys _hq_ovr_ok _hq_ovr_resolved
 fi
-if [ -z "${_HQ_DOCKERFILE_PATH+x}" ]; then
+if [ -z "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE:-}" ]; then
+    # No override given: the default is assigned UNCONDITIONALLY (never a set-test
+    # on a variable the environment could pre-seed -- re-run #3 NEW-H1).
     _HQ_DOCKERFILE_PATH="${DOCKER_BUILD_DIR}/Dockerfile"
 fi
 readonly _HQ_DOCKERFILE_PATH
