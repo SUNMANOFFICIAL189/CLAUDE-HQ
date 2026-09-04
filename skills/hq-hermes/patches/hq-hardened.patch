@@ -1701,10 +1701,10 @@ new file mode 100644
 index 0000000..e69de29
 diff --git a/tests/hq_pilot/test_fence.py b/tests/hq_pilot/test_fence.py
 new file mode 100644
-index 0000000..b62f0df
+index 0000000..212bc11
 --- /dev/null
 +++ b/tests/hq_pilot/test_fence.py
-@@ -0,0 +1,288 @@
+@@ -0,0 +1,298 @@
 +"""Regression tests for the HQ pilot Anthropic/Claude-Code credential fence.
 +
 +Written against skills/hq-hermes/reviews/proof-check-2026-09-03.md (Wave 3,
@@ -1713,7 +1713,7 @@ index 0000000..b62f0df
 +NEW-1/NEW-2 and the H3 import-fallback path. stdlib ``unittest`` only -- no
 +pytest, no network, no real credentials. Run with::
 +
-+    cd "$CO" && ./.venv/bin/python -m unittest tests.hq_pilot.test_fence -v
++    cd "$CO" && HERMES_HOME=<a scratch dir> ./.venv/bin/python -m unittest tests.hq_pilot.test_fence -v
 +"""
 +
 +import collections
@@ -1724,6 +1724,15 @@ index 0000000..b62f0df
 +import unittest
 +from pathlib import Path
 +from unittest.mock import patch
++
++import tempfile
++
++# HQ pilot T3h (2026-09-04): a config load anywhere below must never seed the
++# platform default ~/.hermes (hermes_constants.get_hermes_home falls back to
++# Path.home()/.hermes when HERMES_HOME is unset). Pin a throw-away home for
++# this process if the caller did not.
++if not os.environ.get("HERMES_HOME", "").strip():
++    os.environ["HERMES_HOME"] = tempfile.mkdtemp(prefix="hq-fence-test-home-")
 +
 +REPO_ROOT = Path(__file__).resolve().parents[2]
 +
@@ -1787,6 +1796,7 @@ index 0000000..b62f0df
 +            "ANTHROPIC_TOKEN": "cc-fake-oauth-token",
 +            "CLAUDE_CODE_OAUTH_TOKEN": "cc-fake",
 +            "ANTHROPIC_API_KEY": "fake-plain-api-key",
++            "HERMES_HOME": os.environ["HERMES_HOME"],
 +        }
 +        with patch.dict(os.environ, fake_base_env, clear=True):
 +            result = hermes_subprocess_env(inherit_credentials=True)
