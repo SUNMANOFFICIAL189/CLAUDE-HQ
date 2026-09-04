@@ -2179,3 +2179,7 @@ hook. Full method + reproduce commands in `project_google_cloud_bill_trace_2026_
 ## [Open] — 2026-09-04 — Hermes pilot S3 proof-check RE-RUN residuals (2 MEDIUM / 3 LOW)
 **What:** From `run/pilot-tree/skills/hq-hermes/reviews/proof-check-s3-rerun-2026-09-04.md`. M-a renderer `TEMPLATE=`/`HERMES_HOME` env inputs uncontained + thin self-check → closed in T8c; M-b upstream `check_config_version()` says "up to date" for a corrupt file → T12 pre-flight parses the file itself; L-a trailing-slash `-L` gap → T8c; L-b hardlink under `$SK` (informational); L-c LKG-ordering test → T8c.
 **Acceptance:** T8c closes M-a, L-a, L-c (cite the commit); M-b covered by the T12 pre-flight; L-b accepted in the risk register.
+
+## [Open] — 2026-09-04 — Hermes pilot S3 proof-check RE-RUN #2 residuals (3 MEDIUM / 4 LOW) → T8d
+**What:** From `reviews/proof-check-s3-rerun2-2026-09-04.md`. MEDIUM-a deny guard unreachable (`_get_approval_config` swallows) → T8d; MEDIUM-b `file_tools.py` container_config omits the persist/env/extra-args keys → T8d; MEDIUM-c §1.2 wording (implicit ro mounts) → T8d plan text. LOW: parse-failure warning text + sibling `.bak` write before the raise; stale groq `.pending` inside the allowlist dir (14 aux blocks); placeholder count = lines; dead `pass`.
+**Acceptance:** T8d closes the three MEDIUM (cite commit); LOWs opportunistic.
