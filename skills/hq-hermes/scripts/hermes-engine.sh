@@ -23,6 +23,10 @@
 #   --engine docker-desktop   NOT implemented in this pilot (Docker Desktop must
 #                             never be started here). Prints a message, exit 2.
 #
+# Environment (test-only): HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE points the
+# Dockerfile FROM parse at another file; it is refused (exit 2) unless the file
+# is under this skill directory or HERMES_ENGINE_SELFTEST=1 is also set (R1).
+#
 # Egress probe method: a python3 -c one-liner run INSIDE the target image via
 # `docker run` (python3 is present in both hermes-pilot:v1 and its
 # python:3.11-slim base; wget is present in NEITHER, which is why the old
@@ -60,6 +64,24 @@ readonly DOCKER_BUILD_DIR="${SK_DIR}/docker"
 # Dockerfile FROM parse (see resolve_probe_fallback_image() below) can be
 # exercised against a bogus path without ever touching the real Dockerfile.
 # Unset in normal use -- defaults to the real path.
+# R1 fix (proof-check-rerun3-2026-09-03.md, T3g): the override is enforced as
+# TEST-ONLY. It is honoured only when HERMES_ENGINE_SELFTEST=1, or when the
+# file it names resolves (physically, symlinks followed) to somewhere under
+# this skill's own directory. Anything else is refused with exit 2 before any
+# subcommand runs -- a job environment must never be able to steer which
+# image the probes run in (or build-image pulls) while the egress wall is down.
+if [ -n "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE:-}" ] && [ "${HERMES_ENGINE_SELFTEST:-0}" != "1" ]; then
+    _hq_ovr_dir="$(cd "$(dirname "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE}")" 2>/dev/null && pwd -P)" || _hq_ovr_dir=""
+    _hq_sk_phys="$(cd "${SK_DIR}" && pwd -P)"
+    case "${_hq_ovr_dir}/" in
+        "${_hq_sk_phys}/"*) ;;
+        *)
+            printf '[hermes-engine] refusing HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE=%s: it does not resolve to a file under %s and HERMES_ENGINE_SELFTEST is not 1 (this override is test-only).\n' "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE}" "${_hq_sk_phys}" >&2
+            exit 2
+            ;;
+    esac
+    unset _hq_ovr_dir _hq_sk_phys
+fi
 DOCKERFILE_PATH="${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE:-${DOCKER_BUILD_DIR}/Dockerfile}"
 readonly DOCKERFILE_PATH
 # M8 fix (proof-check-2026-09-03.md): the probe fallback image must be
