@@ -368,6 +368,28 @@ index c23ff83..87452a5 100644
          self._codex_bin = codex_bin
          # codex app-server is a model-driving CLI executor: it runs a
          # model-chosen agentic loop that executes shell commands, so it
+diff --git a/cli.py b/cli.py
+index 3e69298..5a1116d 100644
+--- a/cli.py
++++ b/cli.py
+@@ -610,6 +610,17 @@ def load_cli_config() -> Dict[str, Any]:
+                 defaults["agent"]["max_turns"] = file_config["max_turns"]
+         except Exception as e:
+             logger.warning("Failed to load cli-config.yaml: %s", e)
++            # HQ pilot (T8c-A): a parse failure in the USER config
++            # (~/.hermes/config.yaml) must never fall through to CLI
++            # defaults. The project-level cli-config.yaml fallback below
++            # keeps upstream behaviour (config_path is not user_config_path
++            # in that case).
++            from hermes_cli.config import HQ_PILOT_CONFIG_FAIL_CLOSED
++            if config_path == user_config_path and HQ_PILOT_CONFIG_FAIL_CLOSED:
++                raise RuntimeError(
++                    "HQ pilot: config.yaml exists but failed to parse — "
++                    "refusing CLI defaults"
++                ) from e
+ 
+     # Expand ${ENV_VAR} references in config values before bridging to env vars.
+     from hermes_cli.config import _expand_env_vars
 diff --git a/hermes_cli/auth.py b/hermes_cli/auth.py
 index 963fe06..a47a56d 100644
 --- a/hermes_cli/auth.py
@@ -442,7 +464,7 @@ index 963fe06..a47a56d 100644
  
      issuer = "https://auth.openai.com"
 diff --git a/hermes_cli/config.py b/hermes_cli/config.py
-index f36907d..1de0927 100644
+index f36907d..2453dda 100644
 --- a/hermes_cli/config.py
 +++ b/hermes_cli/config.py
 @@ -44,6 +44,8 @@ logger = logging.getLogger(__name__)
@@ -454,7 +476,38 @@ index f36907d..1de0927 100644
  
  def _backup_corrupt_config(config_path: Path) -> Optional[Path]:
      """Preserve a corrupted ``config.yaml`` by copying it to a timestamped ``.bak``.
-@@ -4017,6 +4019,11 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
+@@ -3507,6 +3509,15 @@ def read_raw_config() -> Dict[str, Any]:
+                 data = fast_safe_load(f) or {}
+         except Exception as e:
+             _warn_config_parse_failure(config_path, e)
++            # HQ pilot (T8c-A): the file EXISTS (we already stat()ed it
++            # above) but failed to parse — {} here would silently read as
++            # "no config", losing e.g. approvals.deny for every caller of
++            # this fast-path reader.
++            if HQ_PILOT_CONFIG_FAIL_CLOSED:
++                raise RuntimeError(
++                    "HQ pilot: config.yaml exists but failed to parse — "
++                    "refusing raw-config read"
++                ) from e
+             return {}
+ 
+         if not isinstance(data, dict):
+@@ -3597,6 +3608,14 @@ def read_raw_config_readonly() -> Dict[str, Any]:
+                 data = fast_safe_load(f) or {}
+         except Exception as e:
+             _warn_config_parse_failure(config_path, e)
++            # HQ pilot (T8c-A): mirror read_raw_config's fail-closed guard —
++            # the file EXISTS but failed to parse, so {} must not stand in
++            # for "no config" on this read-only fast path either.
++            if HQ_PILOT_CONFIG_FAIL_CLOSED:
++                raise RuntimeError(
++                    "HQ pilot: config.yaml exists but failed to parse — "
++                    "refusing raw-config read"
++                ) from e
+             return {}
+ 
+         if not isinstance(data, dict):
+@@ -4017,6 +4036,11 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
                      e,
                      fallback="last-known-good" if lkg is not None else "defaults",
                  )
@@ -544,6 +597,47 @@ index 1af14d3..b3ce676 100644
          from hermes_cli.auth import get_anthropic_key
          key = get_anthropic_key()
          if not key:
+diff --git a/hermes_cli/env_loader.py b/hermes_cli/env_loader.py
+index f926c6e..6317906 100644
+--- a/hermes_cli/env_loader.py
++++ b/hermes_cli/env_loader.py
+@@ -578,7 +578,12 @@ def _reapply_terminal_config_bridge(home_path: Path) -> None:
+         from hermes_cli.config import apply_terminal_config_to_env
+ 
+         apply_terminal_config_to_env(env=None)
+-    except Exception:  # noqa: BLE001 — early bootstrap / malformed config
++    except Exception as e:  # noqa: BLE001 — early bootstrap / malformed config
++        # HQ pilot (T8c-A): an existing-but-unparseable config.yaml must not
++        # be swallowed as "malformed config, keep going" — everything else
++        # (missing file, other startup races) keeps the fail-open default.
++        if isinstance(e, RuntimeError) and str(e).startswith("HQ pilot:"):
++            raise
+         pass
+ 
+ 
+diff --git a/hermes_cli/main.py b/hermes_cli/main.py
+index bab6cf6..cd5b8ff 100644
+--- a/hermes_cli/main.py
++++ b/hermes_cli/main.py
+@@ -13151,6 +13151,18 @@ def _advertise_agent_env() -> None:
+ 
+ def main():
+     """Main entry point for hermes CLI."""
++    # HQ pilot pre-flight (T8c-A): a config.yaml that exists but fails to
++    # parse must never reach argparse/gateway on defaults; sys.exit(3).
++    from hermes_cli.config import HQ_PILOT_CONFIG_FAIL_CLOSED, fast_safe_load, get_hermes_home
++    _preflight_cfg = get_hermes_home() / "config.yaml"
++    if HQ_PILOT_CONFIG_FAIL_CLOSED and _preflight_cfg.exists():
++        try:
++            with open(_preflight_cfg, encoding="utf-8") as _pf:
++                fast_safe_load(_pf)
++        except Exception as _pe:
++            print(f"HQ pilot: config.yaml exists but failed to parse — refusing to start ({_preflight_cfg}): {_pe}", file=sys.stderr)
++            sys.exit(3)
++
+     # Cosmetic: make the process show up as 'hermes' instead of 'python3.11'
+     # in ps/top/htop.  Non-fatal — just a nicer UX.
+     _set_process_title()
 diff --git a/hermes_cli/model_setup_flows.py b/hermes_cli/model_setup_flows.py
 index fbb6f35..4d3e79e 100644
 --- a/hermes_cli/model_setup_flows.py
@@ -1726,10 +1820,10 @@ new file mode 100644
 index 0000000..e69de29
 diff --git a/tests/hq_pilot/test_fence.py b/tests/hq_pilot/test_fence.py
 new file mode 100644
-index 0000000..64223eb
+index 0000000..1162a09
 --- /dev/null
 +++ b/tests/hq_pilot/test_fence.py
-@@ -0,0 +1,363 @@
+@@ -0,0 +1,606 @@
 +"""Regression tests for the HQ pilot Anthropic/Claude-Code credential fence.
 +
 +Written against skills/hq-hermes/reviews/proof-check-2026-09-03.md (Wave 3,
@@ -1742,9 +1836,12 @@ index 0000000..64223eb
 +"""
 +
 +import collections
++import contextlib
++import io
 +import os
 +import re
 +import shutil
++import subprocess
 +import sys
 +import types
 +import unittest
@@ -2091,8 +2188,274 @@ index 0000000..64223eb
 +        self.assertEqual(result["terminal"]["backend"], "local")
 +
 +
++class TestEntrypointPreflightFailsClosed(unittest.TestCase):
++    """A1 (T8c-A, proof-check-s3-rerun-2026-09-04.md NEW CRITICAL): the
++    single choke point at the very top of ``hermes_cli/main.py::main()``
++    (before ``_set_process_title``/argparse) must ``sys.exit(3)`` when
++    ``$HERMES_HOME/config.yaml`` exists but fails to parse. A MISSING
++    config.yaml is the first-run path and must keep going -- proven by
++    reaching ``_set_process_title()``, the very next line, without a
++    real CLI startup (no argparse/chat/network) ever running.
++
++    Tested by calling ``hermes_cli.main.main()`` directly (module already
++    imported once, against this suite's real/valid ``$HH``, before either
++    sub-test patches HERMES_HOME) rather than importing it fresh in a
++    subprocess: ``hermes_cli/main.py`` has its OWN pre-existing
++    module-level ``load_hermes_dotenv()`` call (line ~764, well before
++    ``def main():``) that reaches the A4-guarded terminal-env bridge and
++    now raises first on a cold import against a corrupt config -- with
++    exit code 1 and a traceback, not A1's ``sys.exit(3)`` + one-line
++    message. Confirmed live: ``$HERMES config get`` against a corrupt
++    temp home exits 1 via that module-level crash (see A7 evidence),
++    never reaching A1's own code. A1's guard is real and correct for any
++    caller that already holds the imported module (e.g. a long-lived
++    process re-invoking ``main()``); this test isolates and proves that
++    contract directly, which a fresh-process subprocess cannot exercise
++    now that A4 is fixed. Reported under DONE_WITH_CONCERNS."""
++
++    def test_entrypoint_preflight_exits_3_on_corrupt_config(self):
++        import hermes_cli.main as main_mod
++
++        tmp_bad = tempfile.mkdtemp(prefix="hq-fence-test-a1-bad-")
++        self.addCleanup(shutil.rmtree, tmp_bad, ignore_errors=True)
++        (Path(tmp_bad) / "config.yaml").write_text(
++            "model: [unclosed", encoding="utf-8"
++        )
++
++        stderr_buf = io.StringIO()
++        with patch.dict(os.environ, {"HERMES_HOME": tmp_bad}, clear=False):
++            with contextlib.redirect_stderr(stderr_buf):
++                with self.assertRaises(SystemExit) as ctx:
++                    main_mod.main()
++
++        self.assertEqual(ctx.exception.code, 3)
++        self.assertIn(
++            "HQ pilot: config.yaml exists but failed to parse",
++            stderr_buf.getvalue(),
++        )
++
++        tmp_missing = tempfile.mkdtemp(prefix="hq-fence-test-a1-missing-")
++        self.addCleanup(shutil.rmtree, tmp_missing, ignore_errors=True)
++        self.assertFalse((Path(tmp_missing) / "config.yaml").exists())
++
++        class _PastPreflight(Exception):
++            pass
++
++        with patch.dict(os.environ, {"HERMES_HOME": tmp_missing}, clear=False):
++            with patch.object(
++                main_mod, "_set_process_title", side_effect=_PastPreflight
++            ):
++                with self.assertRaises(_PastPreflight):
++                    main_mod.main()
++
++
++class TestCliConfigLoaderFailsClosed(unittest.TestCase):
++    """A2 (T8c-A): cli.py's module-level ``CLI_CONFIG = load_cli_config()``
++    (executed on ``import cli``) must not let a USER config.yaml that
++    exists but fails to parse fall through to CLI defaults. Exercised
++    end-to-end via a real subprocess import (the earlier NEW CRITICAL
++    review found this exact "Failed to load cli-config.yaml" + defaults
++    path bridging TERMINAL_ENV=local at import time)."""
++
++    def test_cli_config_loader_fails_closed(self):
++        tmp_home = tempfile.mkdtemp(prefix="hq-fence-test-a2-")
++        self.addCleanup(shutil.rmtree, tmp_home, ignore_errors=True)
++        (Path(tmp_home) / "config.yaml").write_text(
++            "model: [unclosed", encoding="utf-8"
++        )
++
++        env = dict(os.environ)
++        env["HERMES_HOME"] = tmp_home
++        proc = subprocess.run(
++            [sys.executable, "-c", "import cli"],
++            env=env,
++            cwd=str(REPO_ROOT),
++            stdin=subprocess.DEVNULL,
++            capture_output=True,
++            text=True,
++            timeout=60,
++        )
++
++        self.assertNotEqual(proc.returncode, 0, proc.stderr)
++        self.assertIn("HQ pilot:", proc.stderr)
++
++
++class TestRawConfigReadersFailClosed(unittest.TestCase):
++    """A3 (T8c-A): ``read_raw_config()``/``read_raw_config_readonly()``
++    used to return ``{}`` on an existing-but-unparseable config.yaml --
++    indistinguishable from "no config" to every caller, including the
++    terminal-env bridge (A4). Both must now raise; a VALID file must still
++    round-trip to the parsed dict."""
++
++    def setUp(self):
++        self._tmp_home = tempfile.mkdtemp(prefix="hq-fence-test-a3-")
++        self.addCleanup(shutil.rmtree, self._tmp_home, ignore_errors=True)
++        self._env_patcher = patch.dict(
++            os.environ, {"HERMES_HOME": self._tmp_home}, clear=False
++        )
++        self._env_patcher.start()
++        self.addCleanup(self._env_patcher.stop)
++        self._clear_config_load_caches()
++        self.addCleanup(self._clear_config_load_caches)
++
++    @staticmethod
++    def _clear_config_load_caches():
++        import hermes_cli.config as config_mod
++
++        config_mod._LOAD_CONFIG_CACHE.clear()
++        config_mod._RAW_CONFIG_CACHE.clear()
++        config_mod._LAST_EXPANDED_CONFIG_BY_PATH.clear()
++        config_mod._CONFIG_PARSE_WARNED.clear()
++
++    def test_read_raw_config_fails_closed(self):
++        import hermes_cli.config as config_mod
++
++        config_path = Path(self._tmp_home) / "config.yaml"
++        config_path.write_text("model: [unclosed", encoding="utf-8")
++
++        with self.assertRaises(RuntimeError):
++            config_mod.read_raw_config()
++        self._clear_config_load_caches()
++        with self.assertRaises(RuntimeError):
++            config_mod.read_raw_config_readonly()
++
++        self._clear_config_load_caches()
++        config_path.write_text("model: my-test-model\n", encoding="utf-8")
++
++        raw = config_mod.read_raw_config()
++        self.assertIsInstance(raw, dict)
++        self.assertEqual(raw.get("model"), "my-test-model")
++
++        self._clear_config_load_caches()
++        raw_ro = config_mod.read_raw_config_readonly()
++        self.assertIsInstance(raw_ro, dict)
++        self.assertEqual(raw_ro.get("model"), "my-test-model")
++
++
++class TestTerminalEnvBridgePropagatesPilotError(unittest.TestCase):
++    """A4 (T8c-A): tools/terminal_tool.py::_ensure_terminal_env_bridged's
++    bare ``except Exception`` used to swallow a config problem as "no
++    terminal section, keep local" -- it must now re-raise a "HQ pilot:"
++    RuntimeError. ``read_raw_config`` is imported LOCALLY inside the
++    function (``from hermes_cli.config import ... read_raw_config``), so
++    the patch target that actually reaches the call is
++    ``hermes_cli.config.read_raw_config`` -- a same-named attribute
++    patched onto ``tools.terminal_tool`` would never be seen by the
++    function's fresh per-call import."""
++
++    def setUp(self):
++        import tools.terminal_tool as terminal_tool_mod
++
++        self._terminal_tool_mod = terminal_tool_mod
++        self._orig_flag = terminal_tool_mod._terminal_config_bridge_attempted
++        terminal_tool_mod._terminal_config_bridge_attempted = False
++        self.addCleanup(
++            setattr,
++            terminal_tool_mod,
++            "_terminal_config_bridge_attempted",
++            self._orig_flag,
++        )
++
++    def test_terminal_env_bridge_propagates_pilot_error(self):
++        with patch(
++            "hermes_cli.config.read_raw_config",
++            side_effect=RuntimeError("HQ pilot: x"),
++        ):
++            with self.assertRaises(RuntimeError) as ctx:
++                self._terminal_tool_mod._ensure_terminal_env_bridged()
++
++        self.assertTrue(str(ctx.exception).startswith("HQ pilot:"))
++
++
++class TestParseFailureBeatsLastKnownGood(unittest.TestCase):
++    """A6/t5 (T8c-A): the last-known-good cache
++    (``_LAST_EXPANDED_CONFIG_BY_PATH``) must not resurrect a stale-but-good
++    config once HQ_PILOT_CONFIG_FAIL_CLOSED is on -- the fail-closed raise
++    in ``_load_config_impl``'s except branch fires BEFORE that fallback is
++    ever consulted (L-c from the same review)."""
++
++    def setUp(self):
++        self._tmp_home = tempfile.mkdtemp(prefix="hq-fence-test-a6-t5-")
++        self.addCleanup(shutil.rmtree, self._tmp_home, ignore_errors=True)
++        self._env_patcher = patch.dict(
++            os.environ, {"HERMES_HOME": self._tmp_home}, clear=False
++        )
++        self._env_patcher.start()
++        self.addCleanup(self._env_patcher.stop)
++        self._clear_config_load_caches()
++        self.addCleanup(self._clear_config_load_caches)
++
++    @staticmethod
++    def _clear_config_load_caches():
++        import hermes_cli.config as config_mod
++
++        config_mod._LOAD_CONFIG_CACHE.clear()
++        config_mod._RAW_CONFIG_CACHE.clear()
++        config_mod._LAST_EXPANDED_CONFIG_BY_PATH.clear()
++        config_mod._CONFIG_PARSE_WARNED.clear()
++
++    def test_parse_failure_beats_last_known_good(self):
++        import hermes_cli.config as config_mod
++
++        config_path = Path(self._tmp_home) / "config.yaml"
++        config_path.write_text("terminal:\n  backend: docker\n", encoding="utf-8")
++        config_mod._LAST_EXPANDED_CONFIG_BY_PATH[str(config_path)] = {
++            "terminal": {"backend": "docker"}
++        }
++
++        config_path.write_text("model: [unclosed", encoding="utf-8")
++
++        with self.assertRaises(RuntimeError):
++            config_mod.load_config()
++
++
++class TestDenyCheckFailsClosed(unittest.TestCase):
++    """A5 (T8c-A): tools/approval.py::_match_user_deny_rule's ``except
++    Exception: return None`` used to read a config error as "no deny rule
++    matched" -- a config problem must never look like a clean pass for the
++    security-critical ``approvals.deny`` gate (a deny rule fires even
++    under yolo)."""
++
++    def test_deny_check_fails_closed(self):
++        import tools.approval as approval_mod
++
++        with patch.object(
++            approval_mod,
++            "_get_approval_config",
++            side_effect=RuntimeError("boom"),
++        ):
++            with self.assertRaises(RuntimeError):
++                approval_mod._match_user_deny_rule("rm -rf /")
++
++
 +if __name__ == "__main__":
 +    unittest.main()
+diff --git a/tools/approval.py b/tools/approval.py
+index 15867a1..bac7f6c 100644
+--- a/tools/approval.py
++++ b/tools/approval.py
+@@ -24,7 +24,7 @@ import time
+ import unicodedata
+ import uuid
+ from typing import Optional
+-from hermes_cli.config import cfg_get
++from hermes_cli.config import cfg_get, HQ_PILOT_CONFIG_FAIL_CLOSED
+ 
+ from tools.interrupt import is_interrupted
+ from utils import env_var_enabled, is_truthy_value
+@@ -808,6 +808,12 @@ def _match_user_deny_rule(command: str) -> str | None:
+     try:
+         deny_patterns = _get_approval_config().get("deny") or []
+     except Exception:
++        # HQ pilot (T8c-A): a config error must never read as "no deny rule
++        # matched" — that would silently drop approvals.deny (the
++        # security-critical rules that are meant to block commands even
++        # under yolo) the moment config.yaml fails to parse.
++        if HQ_PILOT_CONFIG_FAIL_CLOSED:
++            raise
+         return None
+     if not deny_patterns:
+         return None
 diff --git a/tools/environments/local.py b/tools/environments/local.py
 index f876753..96c5937 100644
 --- a/tools/environments/local.py
@@ -2151,3 +2514,23 @@ index f876753..96c5937 100644
  
  def hermes_subprocess_env(*, inherit_credentials: bool = False) -> dict[str, str]:
      """Build a sanitized environment dict for a spawned subprocess.
+diff --git a/tools/terminal_tool.py b/tools/terminal_tool.py
+index 689fcf1..d34b1cb 100644
+--- a/tools/terminal_tool.py
++++ b/tools/terminal_tool.py
+@@ -1751,7 +1751,14 @@ def _ensure_terminal_env_bridged() -> None:
+             # No terminal section in config.yaml, TERMINAL_ENV not set —
+             # backfill from config defaults
+             apply_terminal_config_to_env(env=None, override=False)
+-    except Exception:
++    except Exception as e:
++        # HQ pilot (T8c-A): a config.yaml that exists but fails to parse
++        # must not be swallowed here as "no terminal section" — that would
++        # silently keep/backfill the local backend when the user's broken
++        # config selected docker. Everything else (missing config, other
++        # import/runtime errors) keeps the historical fail-open behaviour.
++        if isinstance(e, RuntimeError) and str(e).startswith("HQ pilot:"):
++            raise
+         # Never let a config problem take the terminal tool down — the
+         # historical local default still applies.
+         logger.debug("terminal config → env fallback bridge failed", exc_info=True)
