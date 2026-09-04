@@ -1,0 +1,120 @@
+# HQ Hermes pilot — hardened config.yaml template (T8, PLAN v2.1l).
+# Rendered by $SK/scripts/pilot/render-config.sh {ollama|groq} — never hand-edit
+# the rendered $HH/config.yaml; edit this template and re-render.
+#
+# Placeholders (filled by the renderer, bash+sed only) -- written here with a
+# space before the second "at" pair so this comment block itself is not
+# rewritten by the renderer's own substitution passes:
+#   MODEL token          (a @ @MODEL@ @ marker) - model.default / delegation.model /
+#                          every auxiliary.*.model
+#   BASE_URL token        (a @ @BASE_URL@ @ marker) - model.base_url
+#   SECRETS_ENABLED token (a @ @SECRETS_ENABLED@ @ marker) - secrets.command.enabled (bare true/false)
+#   KEY_ENV_BLOCK token   (a @ @KEY_ENV_BLOCK@ @ marker) - whole-line marker; deleted
+#                          for ollama (no key needed), replaced with a providers:
+#                          block for groq
+#
+# Keys set here are EXACTLY the T8 (PLAN v2.1l) list — nothing else.
+
+model:
+  provider: "custom"
+  base_url: "@@BASE_URL@@"
+  default: "@@MODEL@@"
+  context_length: 65536
+  ollama_num_ctx: 65536
+
+agent:
+  max_turns: 40
+
+delegation:
+  max_concurrent_children: 1
+  max_spawn_depth: 1
+  provider: "custom"
+  model: "@@MODEL@@"
+
+approvals:
+  mode: "manual"
+  single_query_mode: "deny"
+  cron_mode: "deny"
+  unattended_mode: "deny"
+  deny:
+    - "git push*"
+    - "curl*"
+    - "wget*"
+    - "pip *"
+    - "pip3 *"
+    - "uv pip*"
+    - "npm *"
+    - "brew *"
+    - "osascript*"
+    - "sudo *"
+    - "hermes *"
+    - "ollama *"
+    - "docker *"
+    - "ssh *"
+    - "scp *"
+    - "security *"
+
+memory:
+  write_approval: true
+
+skills:
+  write_approval: true
+  guard_agent_created: true
+
+terminal:
+  backend: "docker"
+  docker_image: "hermes-pilot:v1"
+  container_memory: 2048
+  container_persistent: false
+  docker_network: false
+  docker_forward_env: []
+
+telemetry:
+  shared_metrics:
+    enabled: false
+
+auxiliary:
+  free_only: true
+  vision:
+    provider: "custom"
+    model: "@@MODEL@@"
+  web_extract:
+    provider: "custom"
+    model: "@@MODEL@@"
+  tts_audio_tags:
+    provider: "custom"
+    model: "@@MODEL@@"
+  title_generation:
+    provider: "custom"
+    model: "@@MODEL@@"
+    enabled: false
+  session_search:
+    provider: "custom"
+    model: "@@MODEL@@"
+  compression:
+    provider: "custom"
+    model: "@@MODEL@@"
+  background_review:
+    provider: "custom"
+    model: "@@MODEL@@"
+    enabled: false
+  curator:
+    provider: "custom"
+    model: "@@MODEL@@"
+  approval:
+    provider: "custom"
+    model: "@@MODEL@@"
+  monitor:
+    provider: "custom"
+    model: "@@MODEL@@"
+
+context_file_max_chars: 20000
+
+secrets:
+  command:
+    enabled: @@SECRETS_ENABLED@@
+    command: "/Users/sunil_rajput/claude-hq/run/pilot-tree/skills/hq-hermes/scripts/hermes-secrets.sh"
+    helper_timeout_seconds: 5
+
+hooks: []
+@@KEY_ENV_BLOCK@@
