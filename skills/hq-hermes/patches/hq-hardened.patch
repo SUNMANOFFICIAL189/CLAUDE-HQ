@@ -464,7 +464,7 @@ index 963fe06..a47a56d 100644
  
      issuer = "https://auth.openai.com"
 diff --git a/hermes_cli/config.py b/hermes_cli/config.py
-index f36907d..2453dda 100644
+index f36907d..8031812 100644
 --- a/hermes_cli/config.py
 +++ b/hermes_cli/config.py
 @@ -44,6 +44,8 @@ logger = logging.getLogger(__name__)
@@ -476,7 +476,34 @@ index f36907d..2453dda 100644
  
  def _backup_corrupt_config(config_path: Path) -> Optional[Path]:
      """Preserve a corrupted ``config.yaml`` by copying it to a timestamped ``.bak``.
-@@ -3507,6 +3509,15 @@ def read_raw_config() -> Dict[str, Any]:
+@@ -133,6 +135,26 @@ def _warn_config_parse_failure(
+         return
+     _CONFIG_PARSE_WARNED.add(key)
+ 
++    if fallback == "defaults" and HQ_PILOT_CONFIG_FAIL_CLOSED:
++        # HQ pilot (T8d, LOW-a proof-check-s3-rerun2-2026-09-04.md): under
++        # this flag the caller never actually falls back to DEFAULT_CONFIG
++        # -- it raises a RuntimeError right after this function returns
++        # (see _load_config_impl's except branch) -- so the historical
++        # "Falling back to default config..." message was actively false,
++        # and the sibling .corrupt.*.bak write served no recovery purpose
++        # since there is no live fallback state to protect.
++        msg = (
++            "HQ pilot: config.yaml failed to parse — the pilot refuses to "
++            "fall back (no defaults, no backup written)"
++        )
++        logger.warning(msg)
++        try:
++            sys.stderr.write(f"⚠️  hermes config: {msg}\n")
++            sys.stderr.flush()
++        except Exception:
++            pass
++        return
++
+     backup_path = _backup_corrupt_config(config_path)
+ 
+     if fallback == "last-known-good":
+@@ -3507,6 +3529,15 @@ def read_raw_config() -> Dict[str, Any]:
                  data = fast_safe_load(f) or {}
          except Exception as e:
              _warn_config_parse_failure(config_path, e)
@@ -492,7 +519,7 @@ index f36907d..2453dda 100644
              return {}
  
          if not isinstance(data, dict):
-@@ -3597,6 +3608,14 @@ def read_raw_config_readonly() -> Dict[str, Any]:
+@@ -3597,6 +3628,14 @@ def read_raw_config_readonly() -> Dict[str, Any]:
                  data = fast_safe_load(f) or {}
          except Exception as e:
              _warn_config_parse_failure(config_path, e)
@@ -507,7 +534,7 @@ index f36907d..2453dda 100644
              return {}
  
          if not isinstance(data, dict):
-@@ -4017,6 +4036,11 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
+@@ -4017,6 +4056,11 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
                      e,
                      fallback="last-known-good" if lkg is not None else "defaults",
                  )
@@ -598,23 +625,24 @@ index 1af14d3..b3ce676 100644
          key = get_anthropic_key()
          if not key:
 diff --git a/hermes_cli/env_loader.py b/hermes_cli/env_loader.py
-index f926c6e..6317906 100644
+index f926c6e..71c2da2 100644
 --- a/hermes_cli/env_loader.py
 +++ b/hermes_cli/env_loader.py
-@@ -578,7 +578,12 @@ def _reapply_terminal_config_bridge(home_path: Path) -> None:
+@@ -578,8 +578,12 @@ def _reapply_terminal_config_bridge(home_path: Path) -> None:
          from hermes_cli.config import apply_terminal_config_to_env
  
          apply_terminal_config_to_env(env=None)
 -    except Exception:  # noqa: BLE001 — early bootstrap / malformed config
+-        pass
 +    except Exception as e:  # noqa: BLE001 — early bootstrap / malformed config
 +        # HQ pilot (T8c-A): an existing-but-unparseable config.yaml must not
 +        # be swallowed as "malformed config, keep going" — everything else
 +        # (missing file, other startup races) keeps the fail-open default.
 +        if isinstance(e, RuntimeError) and str(e).startswith("HQ pilot:"):
 +            raise
-         pass
  
  
+ def _apply_managed_env() -> None:
 diff --git a/hermes_cli/main.py b/hermes_cli/main.py
 index bab6cf6..cd5b8ff 100644
 --- a/hermes_cli/main.py
@@ -1820,10 +1848,10 @@ new file mode 100644
 index 0000000..e69de29
 diff --git a/tests/hq_pilot/test_fence.py b/tests/hq_pilot/test_fence.py
 new file mode 100644
-index 0000000..1162a09
+index 0000000..bc4754c
 --- /dev/null
 +++ b/tests/hq_pilot/test_fence.py
-@@ -0,0 +1,606 @@
+@@ -0,0 +1,676 @@
 +"""Regression tests for the HQ pilot Anthropic/Claude-Code credential fence.
 +
 +Written against skills/hq-hermes/reviews/proof-check-2026-09-03.md (Wave 3,
@@ -2410,28 +2438,98 @@ index 0000000..1162a09
 +
 +
 +class TestDenyCheckFailsClosed(unittest.TestCase):
-+    """A5 (T8c-A): tools/approval.py::_match_user_deny_rule's ``except
-+    Exception: return None`` used to read a config error as "no deny rule
-+    matched" -- a config problem must never look like a clean pass for the
-+    security-critical ``approvals.deny`` gate (a deny rule fires even
-+    under yolo)."""
++    """A5 (T8c-A) / MEDIUM-a (T8d, proof-check-s3-rerun2-2026-09-04.md):
++    tools/approval.py::_match_user_deny_rule's ``except Exception: raise``
++    guard was unreachable in production because ``_get_approval_config``
++    itself swallowed every error one frame below it (``except Exception:
++    ... return {}``) -- so a config error read as "no deny rule matched"
++    instead of failing closed, no matter what this test asserted about
++    ``_match_user_deny_rule``. Patching ``_get_approval_config`` directly
++    (the old version of this test) could not detect that: it exercised
++    only ``_match_user_deny_rule``'s own guard, never ``_get_approval_
++    config``'s. This version patches ``hermes_cli.config.load_config_
++    readonly`` instead -- the real function ``_get_approval_config`` calls
++    via a fresh per-call ``from hermes_cli.config import
++    load_config_readonly`` -- so it proves ``_get_approval_config`` now
++    re-raises for real."""
 +
 +    def test_deny_check_fails_closed(self):
++        import hermes_cli.config as config_mod
 +        import tools.approval as approval_mod
 +
++        self.assertTrue(config_mod.HQ_PILOT_CONFIG_FAIL_CLOSED)
++
 +        with patch.object(
-+            approval_mod,
-+            "_get_approval_config",
-+            side_effect=RuntimeError("boom"),
++            config_mod,
++            "load_config_readonly",
++            side_effect=RuntimeError("HQ pilot: x"),
 +        ):
 +            with self.assertRaises(RuntimeError):
 +                approval_mod._match_user_deny_rule("rm -rf /")
 +
 +
++class TestFileToolsContainerConfigHonoursPersistPin(unittest.TestCase):
++    """MEDIUM-b (T8d, proof-check-s3-rerun2-2026-09-04.md):
++    tools/file_tools.py used to build its own ``container_config`` dict by
++    hand, omitting ``docker_persist_across_processes`` (and
++    ``docker_env``/``docker_extra_args``/``docker_shm_size``) -- so the
++    pilot's ``docker_persist_across_processes: false`` pin was silently
++    dropped to ``tools.terminal_tool``'s own ``True`` default whenever
++    ``file_tools`` brought the container up first. ``file_tools`` now
++    routes through ``tools.terminal_tool._container_config_from_config``,
++    the same builder the terminal tool itself uses -- this test drives the
++    real ``_get_file_ops`` code path up to (and including) that call, using
++    the REAL builder (never a stand-in), and aborts with a RuntimeError
++    from inside the patched builder before ``_create_environment`` (and
++    therefore any real docker/network activity) is ever reached."""
++
++    def setUp(self):
++        import tools.terminal_tool as terminal_tool_mod
++
++        self._terminal_tool_mod = terminal_tool_mod
++        self._orig_flag = terminal_tool_mod._terminal_config_bridge_attempted
++        terminal_tool_mod._terminal_config_bridge_attempted = False
++        self.addCleanup(
++            setattr,
++            terminal_tool_mod,
++            "_terminal_config_bridge_attempted",
++            self._orig_flag,
++        )
++
++    def test_file_tools_container_config_honours_persist_pin(self):
++        import tools.file_tools as file_tools_mod
++        import tools.terminal_tool as terminal_tool_mod
++
++        real_builder = terminal_tool_mod._container_config_from_config
++        captured = {}
++
++        def _capture_then_abort(config):
++            captured["container_config"] = real_builder(config)
++            raise RuntimeError(
++                "HQ pilot test: stop before any environment is created"
++            )
++
++        with patch.object(
++            terminal_tool_mod,
++            "_container_config_from_config",
++            side_effect=_capture_then_abort,
++        ):
++            with self.assertRaises(RuntimeError):
++                file_tools_mod._get_file_ops(
++                    "hq-pilot-t8d-file-tools-container-config-test"
++                )
++
++        self.assertIn("container_config", captured)
++        self.assertIs(
++            captured["container_config"]["docker_persist_across_processes"],
++            False,
++        )
++
++
 +if __name__ == "__main__":
 +    unittest.main()
 diff --git a/tools/approval.py b/tools/approval.py
-index 15867a1..bac7f6c 100644
+index 15867a1..269fded 100644
 --- a/tools/approval.py
 +++ b/tools/approval.py
 @@ -24,7 +24,7 @@ import time
@@ -2456,6 +2554,23 @@ index 15867a1..bac7f6c 100644
          return None
      if not deny_patterns:
          return None
+@@ -3443,7 +3449,16 @@ def _get_approval_config() -> dict:
+         config = load_config_readonly()
+         return config.get("approvals", {}) or {}
+     except Exception as e:
++        # HQ pilot (T8d, MEDIUM-a proof-check-s3-rerun2-2026-09-04.md): a
++        # bare `return {}` here swallowed the error one frame BELOW
++        # _match_user_deny_rule's own fail-closed guard (`except Exception:
++        # ... raise`), so that guard was unreachable in production -- this
++        # function never actually raised, it only ever returned {}. Now it
++        # re-raises under the same fail-closed flag; callers that want the
++        # historical fail-open behaviour must catch it themselves.
+         logger.warning("Failed to load approval config: %s", e)
++        if HQ_PILOT_CONFIG_FAIL_CLOSED:
++            raise
+         return {}
+ 
+ 
 diff --git a/tools/environments/local.py b/tools/environments/local.py
 index f876753..96c5937 100644
 --- a/tools/environments/local.py
@@ -2514,6 +2629,46 @@ index f876753..96c5937 100644
  
  def hermes_subprocess_env(*, inherit_credentials: bool = False) -> dict[str, str]:
      """Build a sanitized environment dict for a spawned subprocess.
+diff --git a/tools/file_tools.py b/tools/file_tools.py
+index ddcb060..968de71 100644
+--- a/tools/file_tools.py
++++ b/tools/file_tools.py
+@@ -1521,21 +1521,22 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
+             logger.info("Creating new %s environment for task %s...", env_type, task_id[:8])
+ 
+             container_config = None
+-            from tools.terminal_tool import _is_container_backend as _is_container
++            from tools.terminal_tool import (
++                _is_container_backend as _is_container,
++                _container_config_from_config,
++            )
+ 
+             if _is_container(env_type):
+-                container_config = {
+-                    "container_cpu": config.get("container_cpu", 1),
+-                    "container_memory": config.get("container_memory", 5120),
+-                    "container_disk": config.get("container_disk", 51200),
+-                    "container_persistent": config.get("container_persistent", True),
+-                    "vercel_runtime": config.get("vercel_runtime", ""),
+-                    "docker_volumes": config.get("docker_volumes", []),
+-                    "docker_mount_cwd_to_workspace": config.get("docker_mount_cwd_to_workspace", False),
+-                    "docker_forward_env": config.get("docker_forward_env", []),
+-                    "docker_run_as_host_user": config.get("docker_run_as_host_user", False),
+-                    "docker_network": config.get("docker_network", True),
+-                }
++                # HQ pilot (T8d, MEDIUM-b proof-check-s3-rerun2-2026-09-04.md):
++                # this used to hand-build a dict that omitted
++                # docker_persist_across_processes/docker_env/
++                # docker_extra_args/docker_shm_size, so the pilot's
++                # docker_persist_across_processes: false pin was silently
++                # dropped back to terminal_tool's own True default whenever
++                # file_tools brought the container up first. Route through
++                # the same builder terminal_tool itself uses so the two
++                # paths can never drift apart again.
++                container_config = _container_config_from_config(config)
+ 
+             ssh_config = None
+             if env_type == "ssh":
 diff --git a/tools/terminal_tool.py b/tools/terminal_tool.py
 index 689fcf1..d34b1cb 100644
 --- a/tools/terminal_tool.py

@@ -12,10 +12,27 @@
 #   KEY_ENV_BLOCK token   (a @ @KEY_ENV_BLOCK@ @ marker) - whole-line marker; deleted
 #                          for ollama (no key needed), replaced with a providers:
 #                          block for groq
+#   WORKDIR_BLOCK token   (a @ @WORKDIR_BLOCK@ @ marker) - whole-line marker;
+#                          replaced with `  docker_volumes: []` when the
+#                          renderer runs with no --workdir, or with
+#                          `  cwd: "<dir>"` + `  docker_volumes:
+#                          ["<dir>:/workspace"]` when it runs with
+#                          --workdir <dir> (T8d, HIGH-2 fix — see below)
 #
 # Keys set here are EXACTLY the T8 (PLAN v2.1l) list plus T8b's
 # _config_version stamp, plus T8c-B's full 18-surface auxiliary pin set and
 # the four explicit terminal mount keys — nothing else.
+#
+# HQ pilot T8d (proof-check-s3-rerun2-2026-09-04.md HIGH-2): T8c-B's
+# `docker_mount_cwd_to_workspace: true` mounted the LAUNCH directory
+# read-write at /workspace for every job — whatever directory the wrapper
+# happened to be started from (TERMINAL_CWD or the process cwd), including
+# `~/claude-hq` itself, with no `terminal.cwd` ever set to scope it. The
+# mount is now OFF by default (`docker_mount_cwd_to_workspace: false`) and
+# a job that needs one gets it explicitly and per-run: `render-config.sh
+# ... --workdir <abs dir under $PR>` sets `terminal.cwd` to that exact
+# directory and mounts ONLY `<dir>:/workspace` — never the directory the
+# renderer itself happened to be invoked from.
 #
 # HQ pilot T8c-B (proof-check-s3-rerun-2026-09-04.md NEW HIGH): the T8/T8b
 # auxiliary block pinned only 8 of the 18 real DEFAULT_CONFIG["auxiliary"]
@@ -96,9 +113,9 @@ terminal:
   container_persistent: false
   docker_network: false
   docker_forward_env: []
-  docker_mount_cwd_to_workspace: true
+  docker_mount_cwd_to_workspace: false
   docker_persist_across_processes: false
-  docker_volumes: []
+@@WORKDIR_BLOCK@@
   docker_extra_args: []
 
 telemetry:

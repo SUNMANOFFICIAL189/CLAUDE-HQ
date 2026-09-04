@@ -54,6 +54,21 @@
 
 set -euo pipefail
 
+# H1 fix, round 2 (proof-check-s3-rerun2-2026-09-04.md, T8d): the fence
+# below only ever WROTE _hq_ovr_resolved into a plain DOCKERFILE_PATH
+# variable -- it never unset any inherited DOCKERFILE_PATH first, so an
+# attacker-controlled DOCKERFILE_PATH set directly in the caller's
+# environment (no HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE involved at all)
+# sailed straight through that variable's own bash default-value fallback
+# assignment below and past every check in the fence. Fix: (1) unset any
+# inherited DOCKERFILE_PATH before the fence runs at all, and (2) the
+# fence's accepted/default value now lives in a distinct internal variable,
+# _HQ_DOCKERFILE_PATH, whose own default-value step below uses bash's
+# is-it-set (``+x``) test rather than a default-value (``:-``) fallback, so
+# nothing downstream ever reconstructs the vulnerable pattern under either
+# name.
+unset DOCKERFILE_PATH
+
 # ---- resolved binaries (once) ------------------------------------------------
 readonly COLIMA_BIN="/opt/homebrew/bin/colima"
 DOCKER_BIN="$(command -v docker)"
@@ -96,8 +111,18 @@ readonly DOCKER_BUILD_DIR="${SK_DIR}/docker"
 # basename on the stripped value, and run BOTH the `-f` and `-L` tests on
 # the one fully-resolved path (`_hq_ovr_resolved`) built from that stripped
 # basename -- never on the raw, unresolved override argument. On acceptance,
-# DOCKERFILE_PATH is set to that same resolved path (not the raw override),
-# so nothing downstream ever re-derives a path from the untrusted argument.
+# _HQ_DOCKERFILE_PATH is set to that same resolved path (not the raw
+# override), so nothing downstream ever re-derives a path from the untrusted
+# argument.
+#
+# H1 fix, round 2 (proof-check-s3-rerun2-2026-09-04.md, T8d): this value
+# used to be written into a plain DOCKERFILE_PATH variable, which a caller
+# could set directly in the environment (no override flag needed at all) to
+# skip this whole fence via that variable's own default-value fallback
+# assignment further down. That plain variable is now unset unconditionally
+# near the top of this script and never written to again -- the
+# fence-checked value lives only in the internal _HQ_DOCKERFILE_PATH name
+# below.
 if [ -n "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE:-}" ]; then
     _hq_ovr_stripped="${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE%/}"
     _hq_ovr_dirname="$(dirname "${_hq_ovr_stripped}")"
@@ -120,11 +145,13 @@ if [ -n "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE:-}" ]; then
         printf '[hermes-engine] refusing HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE=%s: it must physically resolve to an existing, non-symlink file under %s (this override is test-only).\n' "${HERMES_ENGINE_DOCKERFILE_PATH_OVERRIDE}" "${_hq_sk_phys}" >&2
         exit 2
     fi
-    DOCKERFILE_PATH="${_hq_ovr_resolved}"
+    _HQ_DOCKERFILE_PATH="${_hq_ovr_resolved}"
     unset _hq_ovr_stripped _hq_ovr_dirname _hq_ovr_base _hq_ovr_dir _hq_sk_phys _hq_ovr_ok _hq_ovr_resolved
 fi
-DOCKERFILE_PATH="${DOCKERFILE_PATH:-${DOCKER_BUILD_DIR}/Dockerfile}"
-readonly DOCKERFILE_PATH
+if [ -z "${_HQ_DOCKERFILE_PATH+x}" ]; then
+    _HQ_DOCKERFILE_PATH="${DOCKER_BUILD_DIR}/Dockerfile"
+fi
+readonly _HQ_DOCKERFILE_PATH
 # M8 fix (proof-check-2026-09-03.md): the probe fallback image must be
 # referenced by the SAME digest as the Dockerfile's FROM line, checked with
 # `docker image inspect` first -- never pulled by a mutable tag (a by-tag
@@ -158,8 +185,8 @@ PROBE_IMAGE=""
 # Digest-pinned base image parsed from the Dockerfile's LAST FROM line, used
 # as select_probe_image()'s fallback when $IMG doesn't exist yet. Populated
 # lazily/memoized by resolve_probe_fallback_image() -- see that function and
-# DOCKERFILE_PATH above for the NEW-4 history of why this moved off the top
-# level.
+# _HQ_DOCKERFILE_PATH above for the NEW-4 history of why this moved off the
+# top level.
 PROBE_FALLBACK_IMG=""
 # Most recent probe lines, used by write_last_probe_file().
 LAST_PROBE_LINE_POSCTRL1=""
@@ -261,12 +288,12 @@ resolve_probe_fallback_image() {
     fi
     local parsed
     parsed="$(
-        grep -oE '^FROM[[:space:]]+[^[:space:]]+@sha256:[0-9a-f]{64}' "${DOCKERFILE_PATH}" 2>/dev/null \
+        grep -oE '^FROM[[:space:]]+[^[:space:]]+@sha256:[0-9a-f]{64}' "${_HQ_DOCKERFILE_PATH}" 2>/dev/null \
             | awk '{print $2}' \
             | tail -n1 || true
     )"
     if [ -z "${parsed}" ]; then
-        err "could not parse a digest-pinned FROM line out of ${DOCKERFILE_PATH}. Refusing to guess a probe fallback image."
+        err "could not parse a digest-pinned FROM line out of ${_HQ_DOCKERFILE_PATH}. Refusing to guess a probe fallback image."
         return 1
     fi
     PROBE_FALLBACK_IMG="${parsed}"
