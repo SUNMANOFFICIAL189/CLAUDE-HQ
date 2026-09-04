@@ -8,7 +8,7 @@
 - Schema: handoff/v1
 - Canonical path: /Users/sunil_rajput/claude-hq/HANDOFF.md
 - Constitution: /Users/sunil_rajput/claude-hq/CLAUDE.md + commander/COMMANDER.md + docs/ORGANIZATION.md
-- Last refreshed: 2026-09-04 11:51 +08 — S3 done; /proof-check GATE CLOSED (1C/3H); T8b defined; NOTHING published since 10:15 — manual
+- Last refreshed: 2026-09-04 14:12 +08 — T8b done; proof-check RE-RUN #1 NOT CLEAN (new CRITICAL: cli.py loader fails open; new HIGH: aux 8/18); T8c awaiting go; nothing published — manual
 - Scope note: this is the HQ-infra handoff. The web-arm sub-project keeps its own at `skills/web-arm/HANDOFF.md`. **The Hermes pilot lives in a separate git worktree** `run/pilot-tree` (branch `hermes-pilot`); its living plan is `run/pilot-tree/skills/hq-hermes/PLAN-v2-2026-09-03.md` (v2.1f) — resume the pilot from THAT file plus the auto-memory note below, not from this handoff alone.
 
 ---
@@ -63,7 +63,7 @@ On 2026-09-03 Hermes Agent was evaluated read-only (four scouts + first-hand doc
 - HQ's proof-gate hook (`scripts/proof-gate.sh`) blocks any Bash command whose text matches `git … (publish|land)`-shaped patterns while `~/.claude/.proof-needed` is set — including a local file write whose sed text merely mentioned those words. Keep such words out of command strings; clear the flag properly via a clean `/proof-check` (the `PROOF_OK=1` prefix does not work — Lesson 8).
 
 ## Open Threads & Next Actions  (numbered; mark DONE in place, never delete)
-1. ⭐ NEXT: **T8b** (sonnet, SECURITY fix ticket in PLAN v2.1p: fail-closed config load on hq-hardened + test; renderer self-check; drop the SELFTEST escape; aux-resolution check; `_config_version` stamp; patch regen) → foreman re-verify → **`/proof-check` re-run (scoped)** → clear `~/.claude/.proof-needed` → publish `hermes-pilot` + land this HANDOFF via `/sync` → then S4 = T9 (proxy/shims/integrity + deferred shellcheck; T12 must set `HERMES_WRITE_SAFE_ROOT`, an explicit workdir mount, `docker_persist_across_processes: false`).
+1. ⭐ NEXT: **T8c** (sonnet; `run/hermes-pilot/tickets/T8c.md`: fail-closed at EVERY loader — `cli.py::load_cli_config`, `read_raw_config*`, the two env bridges — + 4 tests; pin all 18 aux surfaces, checker derives its list from DEFAULT_CONFIG; renderer TEMPLATE fence + stronger asserts; trailing-slash fix; patch 10 commits) → foreman re-verify → `/proof-check` re-run #2 → clean → clear flag → publish + /sync → S4 T9. **T8b is DONE** (H1, H3 closed; C1/H2 partial) — see `reviews/proof-check-s3-rerun-2026-09-04.md`. Previously: **T8b** (sonnet, SECURITY fix ticket in PLAN v2.1p: fail-closed config load on hq-hardened + test; renderer self-check; drop the SELFTEST escape; aux-resolution check; `_config_version` stamp; patch regen) → foreman re-verify → **`/proof-check` re-run (scoped)** → clear `~/.claude/.proof-needed` → publish `hermes-pilot` + land this HANDOFF via `/sync` → then S4 = T9 (proxy/shims/integrity + deferred shellcheck; T12 must set `HERMES_WRITE_SAFE_ROOT`, an explicit workdir mount, `docker_persist_across_processes: false`).
    - DONE 2026-09-04: T3g + T6 + T3h — see Current State.
 2. Hermes pilot: fold `run/hermes-pilot/lessons-candidates.md` into LESSONS.md at T22 (or earlier on operator go): uv/brew gate gap; `timeout` absent; haiku Keychain misreport; `plutil -lint`; core-not-plugin; NEW: fence verify traces routes not readers; guard fallbacks default CLOSED.
 3. On or after **2026-09-16**, run the claude-mem cost re-measurement (baseline + escalation rule in `project_google_cloud_bill_trace_2026_09_02.md`). [carried]
