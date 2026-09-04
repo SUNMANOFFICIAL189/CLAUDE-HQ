@@ -14,7 +14,25 @@
 #                          block for groq
 #
 # Keys set here are EXACTLY the T8 (PLAN v2.1l) list plus T8b's
-# _config_version stamp — nothing else.
+# _config_version stamp, plus T8c-B's full 18-surface auxiliary pin set and
+# the four explicit terminal mount keys — nothing else.
+#
+# HQ pilot T8c-B (proof-check-s3-rerun-2026-09-04.md NEW HIGH): the T8/T8b
+# auxiliary block pinned only 8 of the 18 real DEFAULT_CONFIG["auxiliary"]
+# sub-dicts with a "provider" key (vision, compression, skills_hub, approval,
+# review, mcp, title_generation, memory_query_rewrite, tts_audio_tags,
+# triage_specifier, kanban_decomposer, profile_describer, goal_judge,
+# curator, monitor, background_review, moa_reference, moa_aggregator — 18
+# total); the other 10 silently resolved to provider "auto". web_extract and
+# session_search are retired upstream (no longer auxiliary-LLM tasks;
+# DEFAULT_CONFIG carries only a comment where their blocks used to be) and
+# are dropped here rather than pinned. The four terminal keys
+# (docker_mount_cwd_to_workspace / docker_persist_across_processes /
+# docker_volumes / docker_extra_args) make explicit what PLAN §1.2 already
+# requires in practice (the job workdir is the only bind-mount; Hermes runs
+# with cwd = the job dir; no other volumes; no extra docker flags; no
+# container reuse across processes) instead of leaving them at
+# DEFAULT_CONFIG's implicit defaults.
 
 # HQ pilot T8b (proof-check-s3-2026-09-04.md HIGH-3): pin the schema version
 # this template was written against so a first real `hermes chat`'s
@@ -78,6 +96,10 @@ terminal:
   container_persistent: false
   docker_network: false
   docker_forward_env: []
+  docker_mount_cwd_to_workspace: true
+  docker_persist_across_processes: false
+  docker_volumes: []
+  docker_extra_args: []
 
 telemetry:
   shared_metrics:
@@ -85,36 +107,63 @@ telemetry:
 
 auxiliary:
   free_only: true
+  # All 18 DEFAULT_CONFIG["auxiliary"] sub-dicts that carry a "provider" key
+  # (T8c-B; web_extract/session_search excluded -- retired upstream, no
+  # longer auxiliary-LLM tasks). Order matches config_defaults.py.
   vision:
     provider: "custom"
     model: "@@MODEL@@"
-  web_extract:
+  compression:
     provider: "custom"
     model: "@@MODEL@@"
-  tts_audio_tags:
+  skills_hub:
+    provider: "custom"
+    model: "@@MODEL@@"
+  approval:
+    provider: "custom"
+    model: "@@MODEL@@"
+  review:
+    provider: "custom"
+    model: "@@MODEL@@"
+  mcp:
     provider: "custom"
     model: "@@MODEL@@"
   title_generation:
     provider: "custom"
     model: "@@MODEL@@"
     enabled: false
-  session_search:
+  memory_query_rewrite:
     provider: "custom"
     model: "@@MODEL@@"
-  compression:
+  tts_audio_tags:
+    provider: "custom"
+    model: "@@MODEL@@"
+  triage_specifier:
+    provider: "custom"
+    model: "@@MODEL@@"
+  kanban_decomposer:
+    provider: "custom"
+    model: "@@MODEL@@"
+  profile_describer:
+    provider: "custom"
+    model: "@@MODEL@@"
+  goal_judge:
+    provider: "custom"
+    model: "@@MODEL@@"
+  curator:
+    provider: "custom"
+    model: "@@MODEL@@"
+  monitor:
     provider: "custom"
     model: "@@MODEL@@"
   background_review:
     provider: "custom"
     model: "@@MODEL@@"
     enabled: false
-  curator:
+  moa_reference:
     provider: "custom"
     model: "@@MODEL@@"
-  approval:
-    provider: "custom"
-    model: "@@MODEL@@"
-  monitor:
+  moa_aggregator:
     provider: "custom"
     model: "@@MODEL@@"
 

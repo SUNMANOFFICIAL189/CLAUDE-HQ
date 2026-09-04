@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# HQ Hermes pilot — T8b config renderer (bash + sed + a self-check python
+# HQ Hermes pilot — T8c-B config renderer (bash + sed + a self-check python
 # invocation, no other tools).
 #
-# Usage: render-config.sh {ollama|groq} [--model <name>]
-#   ollama -> fully resolves $SK/templates/config.yaml.tmpl and writes it
+# Usage: render-config.sh {ollama|groq} [--model <name>] [--template <path>]
+#   ollama -> fully resolves the template (default $SK/templates/config.yaml.tmpl,
+#             or --template's fenced path -- see below) and writes it
 #             atomically (temp file + mv) to $HH/config.yaml, where $HH is
 #             $HERMES_HOME if set in the environment, else the pilot's real
 #             HERMES_HOME. Rejects a --model argument (T7 already pinned the
@@ -20,42 +21,93 @@
 #   Missing --model on the groq arm -> exit 2. Any other first argument
 #   (including none, or more than one positional) -> exit 2.
 #
-# Self-check (C1b, proof-check-s3-2026-09-04.md CRITICAL fix): after every
-# substitution pass and BEFORE the atomic mv, the rendered file must (1)
-# contain zero unresolved @@ placeholders and (2) parse as YAML with
-# terminal.backend == "docker", secrets.command.enabled a real bool, hooks a
-# list/dict, and _config_version an int (H3). Any failure -> a message on
-# stderr, exit 1, and the target file left UNCHANGED (the EXIT trap only
-# ever removes this script's own temp files, never $OUT — the atomic mv is
-# the last statement in the script, after both checks pass).
+# --template <path> (T8c-B fix for proof-check-s3-rerun-2026-09-04.md
+# MEDIUM-a): the OLD `TEMPLATE=<env var>` escape hatch has been REMOVED
+# ENTIRELY -- it was an uncontained input to a script that also lets
+# $HERMES_HOME steer the write target, so together they could point the
+# whole render at an arbitrary source and destination with zero fencing. The
+# only way to render from a non-default template now is the --template flag,
+# and it is honoured ONLY when its FULLY resolved path -- directory
+# physically resolved via `cd ... && pwd -P` (after stripping any trailing
+# slash from the argument, same L-a lesson as hermes-engine.sh's override
+# fence: a trailing slash defeats a `-L` test taken on the unresolved
+# argument, so `-L` here is taken on the resolved dir+basename, never the
+# raw argument) plus its basename -- is a regular file (`-f`), is NOT a
+# symlink (`-L` on the resolved path), and lives under $SK/templates. Any
+# other value -> exit 2 before anything is read or written.
 #
-# TEMPLATE=<path> overrides the template file. Test-only escape hatch for
-# proving the self-check can fail on a broken template without touching the
-# real one; never used by a normal ollama/groq render.
+# HERMES_HOME, if set in the environment, must name an existing directory
+# (-d) -- else exit 2. This is the same variable that decides $OUT below, so
+# a typo'd or already-gone HERMES_HOME must never silently create a fresh
+# hierarchy in the wrong place.
+#
+# Self-check (C1b, proof-check-s3-2026-09-04.md CRITICAL fix; expanded by
+# T8c-B for proof-check-s3-rerun-2026-09-04.md MEDIUM-a): after every
+# substitution pass and BEFORE the atomic mv, the rendered file must:
+#   (1) contain zero unresolved @@ placeholders;
+#   (2) parse as YAML with terminal.backend == "docker", secrets.command
+#       .enabled a real bool, hooks a list/dict, and _config_version an int
+#       (H3);
+#   (3) approvals.deny a non-empty list;
+#   (4) auxiliary.free_only is True;
+#   (5) terminal.docker_network is False;
+#   (6) terminal.docker_mount_cwd_to_workspace is True;
+#   (7) terminal.docker_persist_across_processes is False;
+#   (8) terminal.docker_volumes == [] and terminal.docker_extra_args == [];
+#   (9) every `DEFAULT_CONFIG["auxiliary"]` sub-dict with a "provider" key
+#       (imported live, with HERMES_HOME set, from
+#       hermes_cli.config_defaults -- never a list hand-maintained here) is
+#       present in the rendered file with provider == "custom".
+# Any failure -> a message on stderr, exit 1, and the target file left
+# UNCHANGED (the EXIT trap only ever removes this script's own temp files,
+# never $OUT — the atomic mv is the last statement in the script, after
+# every check passes).
 
 set -euo pipefail
 
 SK="/Users/sunil_rajput/claude-hq/run/pilot-tree/skills/hq-hermes"
-HH="${HERMES_HOME:-/Users/sunil_rajput/claude-hq/run/hermes-hq}"
-TMPL="${TEMPLATE:-$SK/templates/config.yaml.tmpl}"
 PY="/Users/sunil_rajput/claude-hq/repos/hermes-agent/.venv/bin/python"
 
 usage() {
-    echo "usage: render-config.sh {ollama|groq} [--model <name>]" >&2
+    echo "usage: render-config.sh {ollama|groq} [--model <name>] [--template <path>]" >&2
 }
+
+# ---- HERMES_HOME fence: if set, must already exist as a directory ----------
+if [ -n "${HERMES_HOME:-}" ] && [ ! -d "${HERMES_HOME}" ]; then
+    echo "render-config.sh: HERMES_HOME=${HERMES_HOME} is set but is not an existing directory" >&2
+    exit 2
+fi
+HH="${HERMES_HOME:-/Users/sunil_rajput/claude-hq/run/hermes-hq}"
 
 ARM="${1:-}"
 shift || true
 
 MODEL_ARG=""
-if [ "$#" -gt 0 ]; then
-    if [ "$1" = "--model" ] && [ "$#" -eq 2 ] && [ -n "$2" ]; then
-        MODEL_ARG="$2"
-    else
-        usage
-        exit 2
-    fi
-fi
+TEMPLATE_ARG=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --model)
+            if [ "$#" -lt 2 ] || [ -z "${2:-}" ]; then
+                usage
+                exit 2
+            fi
+            MODEL_ARG="$2"
+            shift 2
+            ;;
+        --template)
+            if [ "$#" -lt 2 ] || [ -z "${2:-}" ]; then
+                usage
+                exit 2
+            fi
+            TEMPLATE_ARG="$2"
+            shift 2
+            ;;
+        *)
+            usage
+            exit 2
+            ;;
+    esac
+done
 
 case "$ARM" in
     ollama)
@@ -86,6 +138,37 @@ case "$ARM" in
         exit 2
         ;;
 esac
+
+# ---- --template fence: fully-resolved path must be a regular, non-symlink
+# file under $SK/templates. Trailing slash stripped before dirname/basename
+# so a symlinked basename can't hide behind one (same lesson as B5). --------
+SK_TEMPLATES_PHYS="$(cd "$SK/templates" && pwd -P)"
+if [ -n "$TEMPLATE_ARG" ]; then
+    _tpl_stripped="${TEMPLATE_ARG%/}"
+    _tpl_dirname="$(dirname "$_tpl_stripped")"
+    _tpl_base="$(basename "$_tpl_stripped")"
+    _tpl_dir="$(cd "$_tpl_dirname" 2>/dev/null && pwd -P)" || _tpl_dir=""
+    _tpl_ok=0
+    _tpl_resolved=""
+    if [ -n "$_tpl_dir" ]; then
+        case "$_tpl_dir/" in
+            "$SK_TEMPLATES_PHYS/"*)
+                _tpl_resolved="$_tpl_dir/$_tpl_base"
+                if [ -f "$_tpl_resolved" ] && [ ! -L "$_tpl_resolved" ]; then
+                    _tpl_ok=1
+                fi
+                ;;
+        esac
+    fi
+    if [ "$_tpl_ok" -ne 1 ]; then
+        echo "render-config.sh: --template must physically resolve to an existing, non-symlink regular file under $SK_TEMPLATES_PHYS (got: $TEMPLATE_ARG)" >&2
+        exit 2
+    fi
+    TMPL="$_tpl_resolved"
+    unset _tpl_stripped _tpl_dirname _tpl_base _tpl_dir _tpl_ok _tpl_resolved
+else
+    TMPL="$SK/templates/config.yaml.tmpl"
+fi
 
 OUT="$HH/config.yaml"
 
@@ -127,7 +210,7 @@ d
     rm -f "$KEYENV_BLOCK_FILE"
 fi
 
-# ---- C1b self-check: BEFORE the mv. $OUT is untouched by anything below;
+# ---- self-check: BEFORE the mv. $OUT is untouched by anything below;
 # only $TMP_MAIN/$TMP_FINAL (cleaned up by the trap) are read or written. ----
 PLACEHOLDER_COUNT="$(grep -c '@@' "$TMP_FINAL" || true)"
 if [ "$PLACEHOLDER_COUNT" -ne 0 ]; then
@@ -154,9 +237,13 @@ errors = []
 if not isinstance(d, dict):
     errors.append("top-level YAML is not a mapping")
 else:
-    if (d.get("terminal") or {}).get("backend") != "docker":
-        errors.append('terminal.backend != "docker"')
+    terminal = d.get("terminal") or {}
+    auxiliary = d.get("auxiliary") or {}
+    approvals = d.get("approvals") or {}
     secrets_enabled = ((d.get("secrets") or {}).get("command") or {}).get("enabled")
+
+    if terminal.get("backend") != "docker":
+        errors.append('terminal.backend != "docker"')
     if not isinstance(secrets_enabled, bool):
         errors.append("secrets.command.enabled is not a real bool")
     if not isinstance(d.get("hooks"), (list, dict)):
@@ -164,6 +251,41 @@ else:
     cfg_version = d.get("_config_version")
     if isinstance(cfg_version, bool) or not isinstance(cfg_version, int):
         errors.append("_config_version is not an int")
+
+    deny = approvals.get("deny")
+    if not isinstance(deny, list) or not deny:
+        errors.append("approvals.deny is not a non-empty list")
+    if auxiliary.get("free_only") is not True:
+        errors.append("auxiliary.free_only is not True")
+    if terminal.get("docker_network") is not False:
+        errors.append("terminal.docker_network is not False")
+    if terminal.get("docker_mount_cwd_to_workspace") is not True:
+        errors.append("terminal.docker_mount_cwd_to_workspace is not True")
+    if terminal.get("docker_persist_across_processes") is not False:
+        errors.append("terminal.docker_persist_across_processes is not False")
+    if terminal.get("docker_volumes") != []:
+        errors.append("terminal.docker_volumes is not []")
+    if terminal.get("docker_extra_args") != []:
+        errors.append("terminal.docker_extra_args is not []")
+
+    try:
+        from hermes_cli.config_defaults import DEFAULT_CONFIG
+    except Exception as e:
+        DEFAULT_CONFIG = None
+        errors.append(f"could not import DEFAULT_CONFIG to derive the auxiliary surface list: {e}")
+
+    if DEFAULT_CONFIG is not None:
+        aux_defaults = DEFAULT_CONFIG.get("auxiliary") or {}
+        surfaces = sorted(
+            key for key, value in aux_defaults.items()
+            if isinstance(value, dict) and "provider" in value
+        )
+        if not surfaces:
+            errors.append("derived 0 auxiliary surfaces from DEFAULT_CONFIG -- refusing to trust an empty fence")
+        for surface in surfaces:
+            surface_cfg = auxiliary.get(surface)
+            if not isinstance(surface_cfg, dict) or surface_cfg.get("provider") != "custom":
+                errors.append(f"auxiliary.{surface}.provider != 'custom' (got: {surface_cfg!r})")
 
 if errors:
     for e in errors:
