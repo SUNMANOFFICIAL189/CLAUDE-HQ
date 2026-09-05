@@ -96,6 +96,16 @@ WRITE SET: <every file/glob the worker may touch — MANDATORY on
 One task per ticket. If you can't write the acceptance check, you're not
 ready to delegate. Short essentials inline verbatim; bulk artifacts as paths.
 
+**Edit-in-place tickets (added 2026-09-05 after a worker rewrote a 247-line
+doc and silently dropped 9 sections):** when a ticket edits an EXISTING file,
+the WRITE SET includes a dated backup taken FIRST, and the EXPECTED OUTCOME
+includes a mechanical "nothing else changed" check — e.g. the heading list
+before/after is identical apart from the named additions, or
+`diff <backup> <file> | grep -c '^<'` equals the number of lines the ticket
+was told to remove (usually 0). A worker that cannot show that check has not
+finished. Pairs with LESSONS 30 (a writer reconstructs from its transcript,
+not the disk) and 39/34 (measure the output).
+
 **Tier per ticket (explicit `model:` param, always):**
 - `haiku` — mechanical: scanning, extraction, renames, bulk classification.
 - `sonnet` — well-specified implementation, tests, refactors (default).

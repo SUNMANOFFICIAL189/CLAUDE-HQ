@@ -14,6 +14,9 @@ The core method in SKILL.md is engine-agnostic. Each engine needs an adapter tha
 
 ## Live adapter: Higgsfield + GPT Image 2
 
+### Reference authority
+High: attached `medias` references (grade anchor, brand asset) dominate colour, identity and world content over prompt text. The delta rule (SKILL.md, Layer 3) assumes exactly this strong reference authority — name only what the anchor LACKS, never what it already shows.
+
 ### 1. Generate call
 - Tool: `generate_image` on the Higgsfield MCP server.
 - Shape: `{ model, prompt, aspect_ratio, resolution, quality, count, medias[] }` passed inside `params`.
@@ -53,6 +56,9 @@ The core method in SKILL.md is engine-agnostic. Each engine needs an adapter tha
 ---
 
 ## Live adapter: AtlasCloud + GPT Image 2 (edit)
+
+### Reference authority
+High: `images` references dominate scene, composition and grade over prompt text under the edit model — there is no fidelity/preserve flag because the model regenerates from the references rather than inpainting around them. The delta rule assumes this strong reference authority; if it ever proves weaker for a given prompt, name more of what the anchor should be carrying, not less, and re-test at 1k before trusting the change wholesale.
 
 ### 1. Generate call
 - Endpoint: `POST https://api.atlascloud.ai/api/v1/model/generateImage`.
