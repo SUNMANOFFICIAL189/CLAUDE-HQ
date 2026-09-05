@@ -5,7 +5,7 @@
   "identity": "CLAUDE HQ",
   "description": "The central command center for JARVIS — an autonomous agentic system. Claude always references this for major projects. Commander orchestrates all tools.",
   "tool_count": 39,
-  "skill_count": 11,
+  "skill_count": 12,
   "auto_trigger_rules": [
     "ANY PRD provided or referenced by the user triggers CLAUDE HQ activation — this means a long-running project",
     "ANY mention of 'build me', 'create an app', 'develop a system' triggers full-stack activation",
@@ -1530,6 +1530,28 @@
       "auto_activate": true,
       "priority": "HIGH",
       "description": "Project-agnostic zero-loss handoff. Sole writer of the per-project HANDOFF.md. Bare /handoff = read-only RESUME (code wins on doc-vs-code conflict); /handoff save = CTDD checkpoint + fail-closed secret gate + output gate. Auto-surfaced at session start (hook); mechanical last-session backstop at session end (hook). Supersedes ECC save-session + PAUL /paul:handoff for handoff authoring; /save delegates its HANDOFF layer here. Chassis = OFFLIMITS method; grafts = APM code-wins, ykdojo dead-ends, mattpocock structural secret gate."
+    },
+    {
+      "id": "visual-style-lock",
+      "name": "Visual Style Lock — one consistent look across an image set (anchor + typed prompt sections + agent-run inventory/element checks)",
+      "file": "skills/visual-style-lock/SKILL.md",
+      "type": "skill_file",
+      "category": "image-generation",
+      "source": "local://claude-hq/skills/visual-style-lock/ (TWIN of /Volumes/Elements/My_Stuff/OFFLIMITS/.claude/skills/visual-style-lock — keep byte-identical, see feedback_visual_style_lock_twin_copies)",
+      "engines": [
+        "Higgsfield + GPT Image 2",
+        "AtlasCloud + GPT Image 2 (edit)"
+      ],
+      "activation_triggers": [
+        "lock a visual style",
+        "keep these images consistent",
+        "make these stills consistent",
+        "storyboard to stills",
+        "same look across every shot",
+        "set up the image style for a project"
+      ],
+      "added": "2026-09-05",
+      "global_symlink": "~/.claude/skills/visual-style-lock"
     }
   ],
   "tool_combinations": [
